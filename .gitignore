@@ -19,6 +19,7 @@ scratch_*
 node_modules/
 .next/
 out/
+.adk/
 
 # media — footage lives in ..\footage, never here
 *.mp4
@@ -28,6 +29,7 @@ out/
 *.dpx
 *.r3d
 *.ari
+
 
 # os
 Thumbs.db
