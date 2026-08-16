@@ -1,0 +1,10 @@
+google-cloud-aiplatform[agent_engines,adk]>=1.101.0
+google-genai
+clickhouse-connect
+mcp-clickhouse
+parallel-web
+fastapi
+uvicorn
+numpy
+httpx
+python-dotenv
