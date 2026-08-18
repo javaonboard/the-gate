@@ -203,6 +203,13 @@ def evaluate(client, scene_id: str) -> GateDecision:
 
 
 def connect():
+    """A ClickHouse client.
+
+    autogenerate_session_id is off deliberately. With a session, the driver
+    refuses concurrent queries on the same client — and a web server will always
+    end up making them. Without one, each query stands alone and clients are
+    safe to share.
+    """
     return clickhouse_connect.get_client(
         host=os.environ["CLICKHOUSE_HOST"],
         port=int(os.environ.get("CLICKHOUSE_PORT", 8443)),
@@ -210,6 +217,7 @@ def connect():
         password=os.environ["CLICKHOUSE_PASSWORD"],
         secure=True,
         database=DB,
+        autogenerate_session_id=False,
     )
 
 
