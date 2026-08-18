@@ -1,0 +1,279 @@
+/* THE GATE — an operations console, not a dashboard.
+   Dark because it lives at video village, where any light is a problem. */
+
+:root {
+  --bg: #0c0d10;
+  --panel: #14161b;
+  --panel-2: #1a1d23;
+  --line: #262a33;
+  --text: #e8eaed;
+  --muted: #8a90a0;
+  --faint: #5a6070;
+
+  --go: #4ade80;
+  --nogo: #ff6b5b;
+  --warn: #f5a623;
+  --accent: #7aa2ff;
+
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- shell --------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 22px;
+  height: 56px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  font-weight: 600;
+}
+
+.wordmark span { color: var(--faint); }
+
+nav { display: flex; gap: 4px; margin-left: 8px; }
+
+nav button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 13px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+nav button:hover { color: var(--text); background: var(--panel-2); }
+nav button[data-active="true"] { color: var(--text); background: var(--panel-2); }
+
+.topbar .right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+main { overflow-y: auto; padding: 26px; }
+
+/* --- the call ------------------------------------------------------------ */
+
+.verdict {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-bottom: 6px;
+}
+
+.verdict h1 {
+  font-family: var(--mono);
+  font-size: 62px;
+  line-height: 1;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.verdict h1[data-go="true"] { color: var(--go); }
+.verdict h1[data-go="false"] { color: var(--nogo); }
+
+.verdict .where { color: var(--muted); font-size: 14px; }
+
+.spoken {
+  font-size: 19px;
+  line-height: 1.5;
+  max-width: 62ch;
+  margin: 14px 0 30px;
+  color: var(--text);
+}
+
+/* --- panels -------------------------------------------------------------- */
+
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.card h3 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.stat { font-family: var(--mono); font-size: 34px; line-height: 1.1; }
+.stat.small { font-size: 22px; }
+.stat-note { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+
+/* --- odds meter ---------------------------------------------------------- */
+
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.meter > div { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+/* --- requirements -------------------------------------------------------- */
+
+.reqs { margin-top: 22px; }
+
+.req {
+  display: grid;
+  grid-template-columns: 20px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.req:last-child { border-bottom: 0; }
+
+.req .tick { font-family: var(--mono); font-size: 13px; }
+.req[data-state="ok"] .tick { color: var(--go); }
+.req[data-state="miss"] .tick { color: var(--nogo); }
+.req[data-state="gap"] .tick { color: var(--warn); }
+
+.req .what { display: flex; flex-direction: column; gap: 2px; }
+.req .what b { font-weight: 600; }
+.req .what small { color: var(--muted); font-size: 12px; }
+.req .clip { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+.req .cost { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+/* --- options ------------------------------------------------------------- */
+
+.option {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  background: var(--panel);
+}
+
+.option[data-worth="true"] { border-left-color: var(--go); }
+
+.option .head { display: flex; justify-content: space-between; gap: 16px; }
+.option .head b { font-size: 15px; }
+.option .verdict-line { color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+
+.prices { display: flex; gap: 22px; margin-top: 10px; font-family: var(--mono); font-size: 13px; }
+.prices div span { display: block; color: var(--faint); font-size: 11px; font-family: var(--sans); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* --- status rail --------------------------------------------------------- */
+
+.rail {
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 18px 16px;
+  overflow-y: auto;
+}
+
+.rail h2 {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0 0 14px;
+  font-weight: 600;
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  border-bottom: 1px solid transparent;
+}
+
+.event .dot { font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+.event[data-phase="done"] .dot { color: var(--go); }
+.event[data-phase="error"] .dot { color: var(--nogo); }
+.event[data-phase="tool_call"] .dot,
+.event[data-phase="working"] .dot { color: var(--accent); }
+.event[data-phase="tool_result"] .dot { color: var(--muted); }
+.event[data-phase="started"] .dot { color: var(--faint); }
+
+.event .who { display: flex; align-items: baseline; gap: 7px; }
+.event .who b { font-size: 13px; font-weight: 600; }
+.event .who small { color: var(--faint); font-size: 11px; }
+.event .msg { color: var(--muted); font-size: 12.5px; margin-top: 2px; line-height: 1.4; }
+.event .took { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+/* --- misc ---------------------------------------------------------------- */
+
+.controls { display: flex; align-items: center; gap: 10px; }
+
+.controls input[type="range"] { width: 130px; accent-color: var(--accent); }
+
+.toggle {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #0c0d10;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 15px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary:disabled { opacity: 0.5; cursor: default; }
+
+.empty { color: var(--faint); font-size: 14px; padding: 40px 0; }
+
+.term {
+  border-bottom: 1px dotted var(--faint);
+  cursor: help;
+}
