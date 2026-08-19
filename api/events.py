@@ -26,6 +26,7 @@ WORKING = "working"
 TOOL_CALL = "tool_call"
 TOOL_RESULT = "tool_result"
 DONE = "done"
+RESULT = "result"
 ERROR = "error"
 
 MAX_HISTORY = 500
@@ -61,6 +62,13 @@ class Run:
         self.subscribers: set[asyncio.Queue] = set()
         self.seq = 0
         self.finished = False
+        self.result: dict[str, Any] | None = None
+        # The loop that owns the subscriber queues. Work runs in a thread, so
+        # publishing has to hand events back across that boundary.
+        try:
+            self._loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
 
     def publish(self, agent: str, phase: str, message: str,
                 data: dict[str, Any] | None = None) -> AgentEvent:
@@ -76,12 +84,20 @@ class Run:
             elapsed_ms=int((time.monotonic() - self.started_at) * 1000),
         )
         self.history.append(event)
-        for q in list(self.subscribers):
-            try:
-                q.put_nowait(event)
-            except asyncio.QueueFull:
-                pass
+        self._dispatch(event)
         return event
+
+    def _dispatch(self, event: AgentEvent) -> None:
+        try:
+            here = asyncio.get_running_loop()
+        except RuntimeError:
+            here = None
+
+        for q in list(self.subscribers):
+            if here is not None and here is self._loop:
+                _put(q, event)
+            elif self._loop is not None:
+                self._loop.call_soon_threadsafe(_put, q, event)
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=256)
@@ -163,6 +179,13 @@ class step:
         else:
             self.run.publish(self.agent, DONE, self.message, {"took_ms": took})
         return False
+
+
+def _put(q: asyncio.Queue, event: AgentEvent) -> None:
+    try:
+        q.put_nowait(event)
+    except asyncio.QueueFull:
+        pass
 
 
 def sse(event: AgentEvent) -> str:

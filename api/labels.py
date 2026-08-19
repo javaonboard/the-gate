@@ -25,6 +25,11 @@ AGENTS: dict[str, dict[str, str]] = {
         "role": "Script Breakdown",
         "does": "Reads the scene and lists the shots an editor will need",
     },
+    "casting": {
+        "name": "Casting",
+        "role": "Casting",
+        "does": "Finds who is in each take and keeps track of them",
+    },
     "historian": {
         "name": "The Book",
         "role": "Production Records",

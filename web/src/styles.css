@@ -277,3 +277,177 @@ button.primary:disabled { opacity: 0.5; cursor: default; }
   border-bottom: 1px dotted var(--faint);
   cursor: help;
 }
+
+/* --- live jobs ----------------------------------------------------------- */
+
+.job {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 11px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  transition: opacity 0.7s ease;
+}
+
+.job:last-child { border-bottom: 0; }
+
+.job-dot { font-family: var(--mono); font-size: 13px; line-height: 1.4; }
+.job[data-state="done"] .job-dot { color: var(--go); }
+.job[data-state="error"] .job-dot { color: var(--nogo); }
+
+.spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.job .who { display: flex; align-items: baseline; gap: 7px; }
+.job .who b { font-size: 13.5px; font-weight: 600; }
+.job .who small { color: var(--faint); font-size: 11px; }
+.job .took { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: auto; }
+.job .msg { color: var(--muted); font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
+
+/* --- section titles ------------------------------------------------------ */
+
+.section-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* --- footage in ---------------------------------------------------------- */
+
+.drop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.drop:hover { border-color: var(--faint); color: var(--text); }
+.drop[data-over="true"] {
+  border-color: var(--accent);
+  background: rgba(122, 162, 255, 0.07);
+  color: var(--text);
+}
+.drop[data-busy="true"] { border-style: solid; border-color: var(--accent); }
+
+.drop-icon { font-size: 16px; color: var(--faint); }
+
+/* --- the cast matrix ----------------------------------------------------- */
+
+.matrix {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.matrix-head,
+.matrix-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) repeat(4, 92px);
+  align-items: center;
+}
+
+.matrix-head {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.matrix-head > div {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-align: center;
+  cursor: help;
+}
+
+.matrix-row { padding: 9px 14px; border-bottom: 1px solid var(--line); }
+.matrix-row:last-child { border-bottom: 0; }
+
+.person { display: flex; align-items: center; gap: 11px; }
+
+.person img {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.person b { display: block; font-size: 14px; cursor: text; }
+.person b:hover { text-decoration: underline dotted var(--faint); }
+.person small { color: var(--faint); font-size: 11.5px; }
+
+.rename {
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 3px 7px;
+  width: 130px;
+}
+
+.cell {
+  justify-self: center;
+  width: 40px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 14px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.1s;
+}
+
+.cell:hover { transform: scale(1.08); }
+.cell[data-state="have"] { color: var(--go); border-color: rgba(74, 222, 128, 0.35); }
+.cell[data-state="missing"] { color: var(--nogo); border-color: rgba(255, 107, 91, 0.4); }
+.cell[data-state="skip"] { color: var(--faint); opacity: 0.5; }
+
+.cell .count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  font-size: 9.5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 4px;
+  color: var(--muted);
+}
+
+.matrix-key {
+  display: flex;
+  gap: 18px;
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.matrix-key b { font-family: var(--mono); color: var(--text); }

@@ -14,15 +14,18 @@ import os
 import threading
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agents.orchestrator import Trigger, run_gate
+from api.casting_routes import router as casting_router
 from api.events import bus, sse
 from api.labels import AGENTS, GLOSSARY, MOVEMENTS, SHOT_SIZES, person_label
 from core.coverage import connect
@@ -45,6 +48,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(casting_router)
+
+# Cropped faces, served straight to the interface.
+FACES_DIR = Path(__file__).resolve().parent / "static" / "faces"
+FACES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/faces", StaticFiles(directory=str(FACES_DIR)), name="faces")
 
 _local = threading.local()
 
@@ -73,34 +83,61 @@ def demo_crew() -> list[Person]:
 
 # --- the call ---------------------------------------------------------------
 
+async def _do_gate(run, scene_id: str, hours_in: float, use_agent: bool,
+                   trigger: str):
+    call = datetime(2026, 8, 16, 7, 0)
+    try:
+        result = await run_gate(
+            scene_id,
+            now=call + timedelta(hours=hours_in),
+            call=call,
+            next_call=call + timedelta(days=1, hours=1),
+            run=run,
+            trigger=Trigger(trigger),
+            use_agent=use_agent,
+        )
+        payload = {"spoken": result["spoken"], **serialise(result["report"])}
+        run.result = payload
+        run.publish("orchestrator", "result", result["spoken"], payload)
+    except Exception as exc:
+        run.publish("orchestrator", "error", str(exc))
+    finally:
+        run.finish()
+
+
+@app.post("/api/runs")
+async def start_run(scene_id: str = DEFAULT_SCENE, hours_in: float = 9.0,
+                    use_agent: bool = True, trigger: str = "schedule"):
+    """Start a check and return immediately.
+
+    The interface needs the run id before the work begins, otherwise it opens
+    the stream after everything has already happened and the crew appears to
+    finish instantly. The call itself arrives as a `result` event on the stream.
+    """
+    run = bus.start(scene_id)
+    asyncio.create_task(_do_gate(run, scene_id, hours_in, use_agent, trigger))
+    return {"run_id": run.run_id, "scene_id": scene_id}
+
+
+@app.get("/api/runs/{run_id}/result")
+def run_result(run_id: str):
+    run = bus.get(run_id)
+    if run is None:
+        return {"error": "no such run"}
+    return {"finished": run.finished, "result": getattr(run, "result", None)}
+
+
 @app.get("/api/gate/{scene_id}")
 async def gate(scene_id: str = DEFAULT_SCENE, hours_in: float = 9.0,
                use_agent: bool = True, trigger: str = "schedule"):
-    """Run the crew over a scene and return the call.
+    """Run the crew and wait for the call. Kept for scripts and curl.
 
-    Facts are computed first, then the agents read them and speak. Set
-    use_agent=false to skip the language models and return the computed call
-    alone — useful when demonstrating that the numbers do not depend on them.
+    Set use_agent=false to skip the language models and return the computed call
+    alone — useful when demonstrating the numbers do not depend on them.
     """
     run = bus.start(scene_id)
-
-    call = datetime(2026, 8, 16, 7, 0)
-    result = await run_gate(
-        scene_id,
-        now=call + timedelta(hours=hours_in),
-        call=call,
-        next_call=call + timedelta(days=1, hours=1),
-        run=run,
-        trigger=Trigger(trigger),
-        use_agent=use_agent,
-    )
-
-    run.finish()
-    return {
-        "run_id": run.run_id,
-        "spoken": result["spoken"],
-        **serialise(result["report"]),
-    }
+    await _do_gate(run, scene_id, hours_in, use_agent, trigger)
+    return {"run_id": run.run_id, **(getattr(run, "result", None) or {})}
 
 
 def serialise(report) -> dict[str, Any]:

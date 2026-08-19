@@ -15,6 +15,7 @@ Three ways in, all landing here:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -198,7 +199,12 @@ async def run_gate(scene_id: str, now: datetime, call: datetime,
     trigger = trigger or Trigger("schedule")
     client = connect()
 
-    report = gather_evidence(client, scene_id, now, call, next_call, run)
+    # Off the event loop. The queries and the simulation block, and if they run
+    # on the loop nothing reaches the browser until the whole call is finished
+    # — the crew appears to do a day's work in a single instant.
+    report = await asyncio.to_thread(
+        gather_evidence, client, scene_id, now, call, next_call, run
+    )
     brief = evidence_brief(report, trigger)
     spoken = report.summary()
 

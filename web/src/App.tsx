@@ -1,47 +1,28 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, type GateCall } from "./api";
+import { useEffect, useState } from "react";
 import { StatusRail } from "./components/StatusRail";
 import { Library } from "./screens/Library";
 import { Lineage } from "./screens/Lineage";
-import { Scene } from "./screens/Scene";
 import { Today } from "./screens/Today";
+import { useRun } from "./useRun";
 
 const SCENE = "prod_now_sc001";
-const SCREENS = ["Today", "Scene", "Library", "Lineage"] as const;
+const SCREENS = ["Today", "Library", "Lineage"] as const;
 type Screen = (typeof SCREENS)[number];
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("Today");
-  const [call, setCall] = useState<GateCall | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
   const [hoursIn, setHoursIn] = useState(9);
   const [useAgent, setUseAgent] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const check = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.gate(SCENE, hoursIn, useAgent);
-      setCall(result);
-      setRunId(result.run_id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [hoursIn, useAgent]);
+  const { events, call, busy, error, start, follow } = useRun(SCENE);
 
   useEffect(() => {
-    void check();
+    void start(hoursIn, useAgent);
     // first call only; after that the AD asks
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const shootDayClock = new Date(2026, 7, 16, 7, 0);
-  shootDayClock.setHours(shootDayClock.getHours() + Math.floor(hoursIn));
-  shootDayClock.setMinutes((hoursIn % 1) * 60);
+  const shootClock = new Date(2026, 7, 16, 7, 0);
+  shootClock.setMinutes(shootClock.getMinutes() + hoursIn * 60);
 
   return (
     <div className="shell">
@@ -65,7 +46,7 @@ export default function App() {
         <div className="right">
           <div className="controls">
             <span>
-              {shootDayClock.toLocaleTimeString([], {
+              {shootClock.toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
@@ -81,7 +62,10 @@ export default function App() {
             />
           </div>
 
-          <label className="toggle" title="Turn off the language models and show only the computed call">
+          <label
+            className="toggle"
+            title="Turn the language models off and show only the computed call"
+          >
             <input
               type="checkbox"
               checked={useAgent}
@@ -90,7 +74,11 @@ export default function App() {
             crew speaks
           </label>
 
-          <button className="primary" onClick={check} disabled={busy}>
+          <button
+            className="primary"
+            onClick={() => start(hoursIn, useAgent)}
+            disabled={busy}
+          >
             {busy ? "Checking…" : "Check the gate"}
           </button>
         </div>
@@ -103,13 +91,19 @@ export default function App() {
           </div>
         )}
 
-        {screen === "Today" && <Today call={call} />}
-        {screen === "Scene" && <Scene sceneId={SCENE} onChanged={check} />}
+        {screen === "Today" && (
+          <Today
+            call={call}
+            sceneId={SCENE}
+            onIngested={(id) => follow(id)}
+            onChanged={() => start(hoursIn, useAgent)}
+          />
+        )}
         {screen === "Library" && <Library />}
-        {screen === "Lineage" && <Lineage runId={runId} />}
+        {screen === "Lineage" && <Lineage events={events} />}
       </main>
 
-      <StatusRail runId={runId} />
+      <StatusRail events={events} busy={busy} />
     </div>
   );
 }

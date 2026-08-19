@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { AgentEvent } from "../api";
 
@@ -21,6 +21,7 @@ const NODES: NodeSpec[] = [
 
   { key: "vision", label: "Scripty", sub: "script supervisor", pos: [-5.2, 2.6, 0.4], kind: "crew" },
   { key: "script", label: "Breakdown", sub: "what the scene needs", pos: [-5.6, -0.4, -1.2], kind: "crew" },
+  { key: "casting", label: "Casting", sub: "who is in the take", pos: [-7.4, 1.4, 1.2], kind: "crew" },
   { key: "historian", label: "The Book", sub: "production records", pos: [-3.4, -3.0, 0.8], kind: "crew" },
   { key: "scout", label: "Scout", sub: "location scout", pos: [3.4, 3.0, -0.8], kind: "crew" },
   { key: "compliance", label: "Steward", sub: "union rules", pos: [5.4, 0.2, 1.0], kind: "crew" },
@@ -41,6 +42,8 @@ const EDGES: [string, string][] = [
   ["compliance", "orchestrator"], ["planner", "orchestrator"],
   ["control_room", "orchestrator"], ["simulator", "orchestrator"],
   ["src_gemini", "vision"], ["src_gemini", "script"],
+  ["src_gemini", "casting"], ["casting", "orchestrator"],
+  ["casting", "src_clickhouse"],
   ["src_clickhouse", "historian"], ["historian", "simulator"],
   ["src_parallel", "scout"], ["scout", "simulator"],
   ["compliance", "simulator"], ["simulator", "planner"],
@@ -61,30 +64,27 @@ const SOURCE_OF: Record<string, string> = {
   control_room: "src_grafana",
   vision: "src_gemini",
   script: "src_gemini",
+  casting: "src_gemini",
 };
 
-export function Lineage({ runId }: { runId: string | null }) {
+export function Lineage({ events }: { events: AgentEvent[] }) {
   const mount = useRef<HTMLDivElement>(null);
   const activity = useRef<Record<string, number>>({});
-  const [log, setLog] = useState<AgentEvent[]>([]);
+  const seen = useRef(0);
 
-  // live events drive the glow
+  // events light the nodes as they arrive
   useEffect(() => {
-    if (!runId) return;
-    setLog([]);
-    const source = new EventSource(`/api/runs/${runId}/stream`);
-    source.addEventListener("agent", (e) => {
-      const event = JSON.parse((e as MessageEvent).data) as AgentEvent;
-      setLog((prev) => [...prev.slice(-40), event]);
+    for (const event of events.slice(seen.current)) {
       activity.current[event.agent] = 1;
       const src = SOURCE_OF[event.agent];
       if (src && (event.phase === "tool_call" || event.phase === "tool_result")) {
         activity.current[src] = 1;
       }
-    });
-    source.onerror = () => source.close();
-    return () => source.close();
-  }, [runId]);
+    }
+    seen.current = events.length;
+  }, [events]);
+
+  const log = events.filter((e) => e.phase !== "result");
 
   useEffect(() => {
     const el = mount.current;

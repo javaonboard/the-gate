@@ -8,3 +8,4 @@ uvicorn
 numpy
 httpx
 python-dotenv
+Pillow
