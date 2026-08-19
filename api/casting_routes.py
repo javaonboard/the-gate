@@ -39,6 +39,74 @@ def client():
     return _local_client
 
 
+# --- the scenes -------------------------------------------------------------
+
+@router.get("/api/scenes")
+def scenes():
+    """Every scene in the day's work.
+
+    A scene is one continuous piece of story in one place — the canal street,
+    the workshop. It is the unit people actually talk about, and the unit
+    footage gets shot into.
+    """
+    rows = client().query(
+        f"""
+        SELECT s.scene_id, s.location_id, s.int_ext, s.day_night, s.synopsis,
+               uniqExact(t.take_id) AS takes,
+               uniqExact(t.setup_id) AS positions
+        FROM {DB}.scenes AS s
+        LEFT JOIN {DB}.takes AS t ON t.scene_id = s.scene_id
+        WHERE s.production_id = 'prod_now'
+        GROUP BY s.scene_id, s.location_id, s.int_ext, s.day_night, s.synopsis
+        ORDER BY s.scene_id
+        """
+    ).result_rows
+    return [
+        {
+            "scene_id": r[0],
+            "number": r[0].split("sc")[-1].lstrip("0") or "0",
+            "place": r[1].replace("_", " "),
+            "where": "inside" if r[2] == "INT" else "outside",
+            "when": r[3].lower(),
+            "synopsis": r[4],
+            "takes": r[5],
+            "positions": r[6],
+        }
+        for r in rows
+    ]
+
+
+class NewScene(BaseModel):
+    place: str
+    interior: bool = False
+    when: str = "DAY"
+
+
+@router.post("/api/scenes")
+def add_scene(body: NewScene):
+    """Start a new scene — somewhere else, or another time of day."""
+    ch = client()
+    used = [
+        int(r[0].split("sc")[-1])
+        for r in ch.query(
+            f"SELECT scene_id FROM {DB}.scenes WHERE production_id = 'prod_now'"
+        ).result_rows
+    ]
+    n = (max(used) + 1) if used else 1
+    scene_id = f"prod_now_sc{n:03d}"
+
+    ch.insert("scenes", [[
+        "prod_now", scene_id, float(n), 12,
+        "INT" if body.interior else "EXT", body.when.upper(), "dialogue",
+        body.place.strip().replace(" ", "_")[:60] or f"location_{n}",
+        [], "",
+    ]], column_names=["production_id", "scene_id", "script_page",
+                      "page_eighths", "int_ext", "day_night", "scene_type",
+                      "location_id", "characters", "synopsis"])
+    return {"scene_id": scene_id, "number": str(n),
+            "place": body.place.strip()}
+
+
 # --- the cast ---------------------------------------------------------------
 
 class Rename(BaseModel):

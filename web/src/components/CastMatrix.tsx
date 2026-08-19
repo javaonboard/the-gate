@@ -41,8 +41,9 @@ type Matrix = {
   };
 };
 
-export function CastMatrix({ sceneId, onChanged }: {
+export function CastMatrix({ sceneId, reloadKey, onChanged }: {
   sceneId: string;
+  reloadKey?: number;
   onChanged: () => void;
 }) {
   const [data, setData] = useState<Matrix | null>(null);
@@ -55,7 +56,7 @@ export function CastMatrix({ sceneId, onChanged }: {
 
   useEffect(() => {
     void load();
-  }, [sceneId]);
+  }, [sceneId, reloadKey]);
 
   async function toggle(characterId: string, band: string, required: boolean) {
     await fetch(`/api/scenes/${sceneId}/need/${characterId}/${band}`, {

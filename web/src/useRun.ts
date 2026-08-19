@@ -15,7 +15,7 @@ export function useRun(scene: string) {
   const source = useRef<EventSource | null>(null);
 
   const start = useCallback(
-    async (hoursIn: number, useAgent: boolean) => {
+    async (hoursIn: number, useAgent: boolean, sceneOverride?: string) => {
       source.current?.close();
       setEvents([]);
       setError(null);
@@ -23,7 +23,8 @@ export function useRun(scene: string) {
 
       try {
         const res = await fetch(
-          `/api/runs?scene_id=${scene}&hours_in=${hoursIn}&use_agent=${useAgent}`,
+          `/api/runs?scene_id=${sceneOverride ?? scene}` +
+            `&hours_in=${hoursIn}&use_agent=${useAgent}`,
           { method: "POST" }
         );
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -38,7 +39,7 @@ export function useRun(scene: string) {
           setEvents((prev) => [...prev, event]);
 
           if (event.phase === "result") {
-            setCall({ run_id, ...(event.data as unknown as GateCall) });
+            setCall({ ...(event.data as unknown as GateCall), run_id });
             setBusy(false);
           }
           if (event.phase === "error") {
@@ -78,7 +79,7 @@ export function useRun(scene: string) {
       const event = JSON.parse((e as MessageEvent).data) as AgentEvent;
       setEvents((prev) => [...prev, event]);
       if (event.phase === "result") {
-        setCall({ run_id: id, ...(event.data as unknown as GateCall) });
+        setCall({ ...(event.data as unknown as GateCall), run_id: id });
       }
       if (event.phase === "complete") {
         setBusy(false);

@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/userun.ts","./src/components/castmatrix.tsx","./src/components/dropzone.tsx","./src/components/scenebar.tsx","./src/components/setupstrip.tsx","./src/components/statusrail.tsx","./src/screens/library.tsx","./src/screens/lineage.tsx","./src/screens/today.tsx"],"version":"5.9.3"}

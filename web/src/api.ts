@@ -53,7 +53,15 @@ export type AgentEvent = {
   agent: string;
   agent_name: string;
   agent_role: string;
-  phase: "started" | "working" | "tool_call" | "tool_result" | "done" | "error";
+  phase:
+    | "started"
+    | "working"
+    | "tool_call"
+    | "tool_result"
+    | "done"
+    | "result"     // the finished call, carried in data
+    | "complete"   // the whole run is over
+    | "error";
   message: string;
   data: Record<string, unknown>;
   seq: number;
