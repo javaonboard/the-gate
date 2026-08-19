@@ -41,8 +41,9 @@ type Matrix = {
   };
 };
 
-export function CastMatrix({ sceneId, reloadKey, onChanged }: {
+export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
   sceneId: string;
+  sceneName?: string;
   reloadKey?: number;
   onChanged: () => void;
 }) {
@@ -84,7 +85,8 @@ export function CastMatrix({ sceneId, reloadKey, onChanged }: {
   if (!data.characters.length) {
     return (
       <div className="empty">
-        No faces found yet. Drop some footage in and the cast builds itself.
+        Nothing shot in {sceneName || "this scene"} yet. Drop footage in and the
+        cast builds itself.
       </div>
     );
   }
@@ -94,7 +96,9 @@ export function CastMatrix({ sceneId, reloadKey, onChanged }: {
   return (
     <section style={{ marginTop: 28 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <h3 className="section-title">Who's covered</h3>
+        <h3 className="section-title">
+          Who's in {sceneName || "this scene"}
+        </h3>
         <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
           {summary.have} of {summary.required} shots
           {summary.exposure_usd > 0 && (

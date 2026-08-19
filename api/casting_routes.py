@@ -61,8 +61,16 @@ def scenes():
         ORDER BY s.scene_id
         """
     ).result_rows
-    return [
-        {
+    ch = client()
+    out = []
+    for r in rows:
+        # Each scene carries its own state, so the AD can see which ones are
+        # short without opening them.
+        summary = cc.summarise(cc.matrix(ch, r[0])) if r[5] else {
+            "characters": 0, "required": 0, "have": 0,
+            "completeness": 0.0, "missing": [], "exposure_usd": 0,
+        }
+        out.append({
             "scene_id": r[0],
             "number": r[0].split("sc")[-1].lstrip("0") or "0",
             "place": r[1].replace("_", " "),
@@ -71,9 +79,14 @@ def scenes():
             "synopsis": r[4],
             "takes": r[5],
             "positions": r[6],
-        }
-        for r in rows
-    ]
+            "people": summary["characters"],
+            "have": summary["have"],
+            "required": summary["required"],
+            "missing": len(summary["missing"]),
+            "exposure_usd": summary["exposure_usd"],
+            "complete": summary["required"] > 0 and not summary["missing"],
+        })
+    return out
 
 
 class NewScene(BaseModel):

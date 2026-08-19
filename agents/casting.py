@@ -464,13 +464,37 @@ def cast_scene(scene_id: str, clips_dir: Path, run=None, reset: bool = False
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--scene", default="prod_now_sc001")
+    ap.add_argument("--all", action="store_true",
+                    help="every scene in the production")
     ap.add_argument("--clips", default="../footage/clips")
     ap.add_argument("--reset", action="store_true")
     args = ap.parse_args()
 
-    result = cast_scene(args.scene, Path(args.clips), reset=args.reset)
+    ch = connect()
 
-    print(f"\n{result['takes_seen']} takes, {len(result['cast'])} characters:\n")
-    for c in result["cast"]:
-        print(f"  {c['name']:14s} {c['appearances']:3d} appearances"
-              f"  {c['description'][:60]}")
+    if args.all:
+        scenes = [r[0] for r in ch.query(
+            f"SELECT scene_id FROM {DB}.scenes "
+            f"WHERE production_id = 'prod_now' ORDER BY scene_id"
+        ).result_rows]
+        for i, scene in enumerate(scenes):
+            print(f"\n=== {scene} ===", flush=True)
+            # wipe only on the first scene, or each pass erases the last
+            cast_scene(scene, Path(args.clips),
+                       reset=args.reset and i == 0)
+
+        cast = ch.query(
+            f"SELECT name, appearances, description "
+            f"FROM {DB}.characters FINAL "
+            f"WHERE production_id = 'prod_now' ORDER BY appearances DESC"
+        ).result_rows
+        print(f"\nacross {len(scenes)} scenes, {len(cast)} people:")
+        for name, seen, description in cast:
+            print(f"  {name:14s} {seen:3d} appearances  "
+                  f"{description[:58]}")
+    else:
+        result = cast_scene(args.scene, Path(args.clips), reset=args.reset)
+        print(f"\n{len(result['cast'])} people:")
+        for c in result["cast"]:
+            print(f"  {c['name']:14s} {c['appearances']:3d} appearances "
+                  f" {c['description'][:58]}")

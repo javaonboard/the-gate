@@ -15,6 +15,12 @@ export type Scene = {
   when: string;
   takes: number;
   positions: number;
+  people: number;
+  have: number;
+  required: number;
+  missing: number;
+  exposure_usd: number;
+  complete: boolean;
 };
 
 export function SceneBar({ selected, onSelect, reloadKey }: {
@@ -65,9 +71,26 @@ export function SceneBar({ selected, onSelect, reloadKey }: {
           <span className="scene-body">
             <b>{s.place}</b>
             <small>
-              {s.where} · {s.when} ·{" "}
-              {s.takes ? `${s.takes} takes` : "nothing shot"}
+              {s.where} · {s.takes ? `${s.takes} takes` : "nothing shot"}
+              {s.people > 0 && ` · ${s.people} on camera`}
             </small>
+            {s.required > 0 && (
+              <span className="scene-state">
+                <span className="scene-meter">
+                  <span
+                    style={{
+                      width: `${(s.have / s.required) * 100}%`,
+                      background: s.complete ? "var(--go)" : "var(--warn)",
+                    }}
+                  />
+                </span>
+                <em data-short={!s.complete}>
+                  {s.complete
+                    ? "covered"
+                    : `${s.missing} shot${s.missing > 1 ? "s" : ""} short`}
+                </em>
+              </span>
+            )}
           </span>
         </button>
       ))}

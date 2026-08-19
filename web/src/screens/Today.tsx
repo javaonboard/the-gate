@@ -77,15 +77,6 @@ export function Today({ call, scene, onScene, onIngested, onChanged }: {
         }}
       />
 
-      {/* what we have on each person */}
-      {sceneId && (
-        <CastMatrix
-          sceneId={sceneId}
-          reloadKey={reloadKey}
-          onChanged={onChanged}
-        />
-      )}
-
       {call && call.options.filter((o) => o.worth_it).length > 0 && (
         <section style={{ marginTop: 26 }}>
           <h3 className="section-title">Worth grabbing before we move</h3>
@@ -123,15 +114,21 @@ export function Today({ call, scene, onScene, onIngested, onChanged }: {
         </section>
       )}
 
-      {/* the day's scenes */}
-      <h3 className="section-title" style={{ marginTop: 30 }}>
+      {/* pick a scene */}
+      <h3 className="section-title" style={{ marginTop: 26 }}>
         Scenes today
       </h3>
-      <SceneBar
-        selected={sceneId}
-        onSelect={onScene}
-        reloadKey={reloadKey}
-      />
+      <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey} />
+
+      {/* and the breakdown of the one that's open */}
+      {sceneId && (
+        <CastMatrix
+          sceneId={sceneId}
+          sceneName={scene ? `scene ${scene.number} · ${scene.place}` : ""}
+          reloadKey={reloadKey}
+          onChanged={onChanged}
+        />
+      )}
     </>
   );
 }

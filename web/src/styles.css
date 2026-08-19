@@ -532,3 +532,27 @@ button.primary:disabled { opacity: 0.5; cursor: default; }
   display: flex; align-items: center; gap: 4px;
   font-size: 12px; color: var(--muted);
 }
+
+/* --- scene state --------------------------------------------------------- */
+
+.scene-state { display: flex; align-items: center; gap: 7px; margin-top: 5px; }
+
+.scene-meter {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--panel-2);
+  overflow: hidden;
+  min-width: 44px;
+}
+
+.scene-meter > span { display: block; height: 100%; border-radius: 2px; }
+
+.scene-state em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--go);
+  white-space: nowrap;
+}
+
+.scene-state em[data-short="true"] { color: var(--warn); }
