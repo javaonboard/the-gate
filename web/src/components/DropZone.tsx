@@ -5,8 +5,9 @@ import { useRef, useState } from "react";
  *  Drop clips here and nothing else is asked of you. Each one is watched,
  *  the faces are found and matched against the people already in the scene,
  *  and the call reruns. */
-export function DropZone({ sceneId, onIngested }: {
+export function DropZone({ sceneId, setupId, onIngested }: {
   sceneId: string;
+  setupId: string;
   onIngested: (runId: string) => void;
 }) {
   const [over, setOver] = useState(false);
@@ -26,6 +27,7 @@ export function DropZone({ sceneId, onIngested }: {
     setNote(null);
     const body = new FormData();
     for (const f of clips) body.append("files", f);
+    body.append("setup_id", setupId);
 
     try {
       const res = await fetch(`/api/scenes/${sceneId}/footage`, {
@@ -72,7 +74,10 @@ export function DropZone({ sceneId, onIngested }: {
       <span>
         {sending
           ? "Taking it in…"
-          : note ?? "Drop footage off the card, or click to pick"}
+          : note ??
+            (setupId
+              ? `Drop footage for ${setupId.split("_").slice(-1)[0]}, or click to pick`
+              : "Drop footage off the card, or click to pick")}
       </span>
     </div>
   );

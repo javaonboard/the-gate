@@ -105,6 +105,88 @@ def set_need(scene_id: str, character_id: str, band: str, body: BandSetting):
             "required": body.required}
 
 
+# --- the day's setups -------------------------------------------------------
+
+class NewSetup(BaseModel):
+    label: str = ""
+
+
+@router.get("/api/scenes/{scene_id}/setups")
+def setups(scene_id: str):
+    """The camera positions planned for this scene, and what has landed in each."""
+    rows = client().query(
+        f"""
+        SELECT s.setup_id, s.start_ts, s.actual_duration_s,
+               uniqExact(t.take_id) AS takes,   -- both joins fan out; count once
+               anyIf(a.shot_size, a.shot_size != '') AS shot_size
+        FROM {DB}.setups AS s
+        LEFT JOIN {DB}.takes AS t ON t.setup_id = s.setup_id
+        LEFT JOIN {DB}.take_analysis AS a ON a.setup_id = s.setup_id
+        WHERE s.scene_id = %(s)s
+        GROUP BY s.setup_id, s.start_ts, s.actual_duration_s
+        ORDER BY s.setup_id
+        """,
+        parameters={"s": scene_id},
+    ).result_rows
+    return [
+        {"setup_id": r[0], "label": r[0].split("_")[-1],
+         "takes": r[3], "shot_size": r[4] or "", "shot": bool(r[3])}
+        for r in rows
+    ]
+
+
+@router.post("/api/scenes/{scene_id}/setups")
+def add_setup(scene_id: str, body: NewSetup):
+    """Plan another camera position. Footage gets dropped onto it."""
+    ch = client()
+    row = ch.query(
+        f"SELECT production_id, location_id, int_ext, day_night, scene_type "
+        f"FROM {DB}.scenes WHERE scene_id = %(s)s",
+        parameters={"s": scene_id},
+    ).result_rows
+    production_id, location_id, int_ext, day_night, scene_type = (
+        row[0] if row else ("prod_now", "canal_street", "EXT", "DAY", "dialogue")
+    )
+
+    used = {
+        r[0].split("_")[-1]
+        for r in ch.query(
+            f"SELECT setup_id FROM {DB}.setups WHERE scene_id = %(s)s",
+            parameters={"s": scene_id},
+        ).result_rows
+    }
+    letter = next(
+        (c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if c not in used),
+        uuid.uuid4().hex[:2].upper(),
+    )
+    setup_id = f"{scene_id}_{body.label.strip() or letter}"
+    now = datetime.now()
+
+    ch.insert(
+        "setups",
+        [[production_id, date.today(), scene_id, setup_id, now, None,
+          2400, 0, location_id, int_ext, day_night, scene_type, 0,
+          "dp_lind", 62]],
+        column_names=["production_id", "shoot_day", "scene_id", "setup_id",
+                      "start_ts", "end_ts", "planned_duration_s",
+                      "actual_duration_s", "location_id", "int_ext",
+                      "day_night", "scene_type", "extras_count", "dp_id",
+                      "crew_size"],
+    )
+    return {"setup_id": setup_id, "label": setup_id.split("_")[-1]}
+
+
+@router.delete("/api/scenes/{scene_id}/setups/{setup_id}")
+def remove_setup(scene_id: str, setup_id: str):
+    ch = client()
+    for table in ("setups", "takes", "take_analysis", "take_characters"):
+        ch.command(
+            f"ALTER TABLE {DB}.{table} DELETE WHERE setup_id = %(u)s",
+            parameters={"u": setup_id},
+        )
+    return {"deleted": setup_id}
+
+
 # --- taking footage in ------------------------------------------------------
 
 def _probe_duration(path: Path) -> float:
@@ -147,7 +229,26 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
                     f"{take_id}: {analysis['shot_size']}, "
                     f"{analysis['subjects_count']} in frame")
 
+        # Dropped onto a setup, it belongs there. Dropped loose, it gets a
+        # setup of its own named after the framing, so nothing is silently
+        # lumped in with an unrelated camera position.
         setup_id = setup_hint or f"{scene_id}_{analysis['shot_size']}"
+        if not setup_hint:
+            exists = ch.query(
+                f"SELECT count() FROM {DB}.setups WHERE setup_id = %(u)s",
+                parameters={"u": setup_id},
+            ).result_rows[0][0]
+            if not exists:
+                ch.insert("setups", [[
+                    production_id, shoot_day, scene_id, setup_id,
+                    datetime.now(), None, 2400, 0,
+                    row[0][1] if row else "canal_street", "EXT", "DAY",
+                    "dialogue", 0, "dp_lind", 62,
+                ]], column_names=[
+                    "production_id", "shoot_day", "scene_id", "setup_id",
+                    "start_ts", "end_ts", "planned_duration_s",
+                    "actual_duration_s", "location_id", "int_ext", "day_night",
+                    "scene_type", "extras_count", "dp_id", "crew_size"])
         take_no = ch.query(
             f"SELECT count() + 1 FROM {DB}.takes WHERE setup_id = %(u)s",
             parameters={"u": setup_id},

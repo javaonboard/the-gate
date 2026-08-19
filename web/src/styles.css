@@ -451,3 +451,50 @@ button.primary:disabled { opacity: 0.5; cursor: default; }
 }
 
 .matrix-key b { font-family: var(--mono); color: var(--text); }
+
+/* --- camera positions ---------------------------------------------------- */
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.strip-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-right: 6px;
+}
+
+.chip {
+  position: relative;
+  min-width: 38px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chip:hover { color: var(--text); border-color: var(--faint); }
+.chip[data-active="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(122, 162, 255, 0.1);
+}
+.chip[data-shot="true"] { color: var(--text); }
+.chip.add { color: var(--faint); font-size: 14px; }
+
+.chip-count {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}

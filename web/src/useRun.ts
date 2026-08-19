@@ -45,7 +45,7 @@ export function useRun(scene: string) {
             setError(event.message);
             setBusy(false);
           }
-          if (event.phase === "done" && event.agent === "orchestrator") {
+          if (event.phase === "complete") {
             setBusy(false);
             es.close();
           }
@@ -80,7 +80,7 @@ export function useRun(scene: string) {
       if (event.phase === "result") {
         setCall({ run_id: id, ...(event.data as unknown as GateCall) });
       }
-      if (event.phase === "done" && event.agent === "orchestrator") {
+      if (event.phase === "complete") {
         setBusy(false);
         es.close();
       }

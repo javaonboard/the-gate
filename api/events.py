@@ -27,6 +27,7 @@ TOOL_CALL = "tool_call"
 TOOL_RESULT = "tool_result"
 DONE = "done"
 RESULT = "result"
+COMPLETE = "complete"
 ERROR = "error"
 
 MAX_HISTORY = 500
@@ -110,8 +111,16 @@ class Run:
         self.subscribers.discard(q)
 
     def finish(self) -> None:
+        """End of the whole run.
+
+        Deliberately its own phase. ADK fires after_agent_callback for the root
+        agent too, and if that looked identical the interface would hang up
+        before the call arrived.
+        """
+        if self.finished:
+            return
         self.finished = True
-        self.publish("orchestrator", DONE, "Call complete")
+        self.publish("orchestrator", COMPLETE, "Call complete")
 
 
 class Bus:

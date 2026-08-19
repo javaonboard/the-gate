@@ -34,6 +34,20 @@ export function StatusRail({ events, busy }: {
     const e = events[events.length - 1];
     if (e.phase === "result") return;
 
+    // The run is over. ADK does not always close every sub-agent it opened,
+    // so anything still turning is finished by definition.
+    if (e.phase === "complete") {
+      setJobs((prev) => {
+        const now = Date.now();
+        const out: Record<string, Job> = {};
+        for (const [k, j] of Object.entries(prev)) {
+          out[k] = j.state === "working" ? { ...j, state: "done", since: now } : j;
+        }
+        return out;
+      });
+      return;
+    }
+
     setJobs((prev) => {
       const existing = prev[e.agent];
       const next: Job = {

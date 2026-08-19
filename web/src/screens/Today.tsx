@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { GateCall } from "../api";
 import { clock, pct, usd } from "../api";
 import { CastMatrix } from "../components/CastMatrix";
 import { DropZone } from "../components/DropZone";
+import { SetupStrip } from "../components/SetupStrip";
 
 function oddsColour(p: number) {
   if (p >= 0.7) return "var(--go)";
@@ -15,9 +17,25 @@ export function Today({ call, sceneId, onIngested, onChanged }: {
   onIngested: (runId: string) => void;
   onChanged: () => void;
 }) {
+  const [setupId, setSetupId] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
   return (
     <>
-      <DropZone sceneId={sceneId} onIngested={onIngested} />
+      <SetupStrip
+        sceneId={sceneId}
+        selected={setupId}
+        onSelect={setSetupId}
+        reloadKey={reloadKey}
+      />
+      <DropZone
+        sceneId={sceneId}
+        setupId={setupId}
+        onIngested={(id) => {
+          setReloadKey((n) => n + 1);
+          onIngested(id);
+        }}
+      />
 
       {!call ? (
         <div className="empty">Working out where we are…</div>
