@@ -50,6 +50,7 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
   const [data, setData] = useState<Matrix | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [merging, setMerging] = useState<string | null>(null);
 
   async function load() {
     setData(await fetch(`/api/scenes/${sceneId}/matrix`).then((r) => r.json()));
@@ -79,6 +80,15 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
       body: JSON.stringify({ name }),
     });
     await load();
+  }
+
+  async function mergeInto(targetId: string) {
+    const from = merging;
+    setMerging(null);
+    if (!from || from === targetId) return;
+    await fetch(`/api/characters/${from}/is/${targetId}`, { method: "POST" });
+    await load();
+    onChanged();
   }
 
   if (!data) return null;
@@ -123,6 +133,19 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
               <img
                 src={row.face_uri}
                 alt={row.name}
+                className="face"
+                data-merging={merging === row.character_id}
+                data-target={!!merging && merging !== row.character_id}
+                title={
+                  merging === row.character_id
+                    ? "Click another face to say they are the same person"
+                    : merging
+                      ? `Same person as the one you picked? Click to merge.`
+                      : "Click if this face is really someone already listed"
+                }
+                onClick={() =>
+                  merging ? mergeInto(row.character_id) : setMerging(row.character_id)
+                }
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.visibility = "hidden";
                 }}
@@ -186,12 +209,20 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
         ))}
       </div>
 
+      {merging && (
+        <div className="merge-hint">
+          Now click the face that is the same person.
+          <button onClick={() => setMerging(null)}>cancel</button>
+        </div>
+      )}
+
       <div className="matrix-key">
         <span><b>✓</b> got it</span>
         <span><b>✕</b> needed, not shot</span>
         <span><b>–</b> not needed</span>
         <span style={{ marginLeft: "auto", color: "var(--faint)" }}>
-          click any square to change what this scene needs
+          click a square to change what's needed · click a face to merge two of
+          the same person
         </span>
       </div>
     </section>

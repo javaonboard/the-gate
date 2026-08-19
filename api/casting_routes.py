@@ -157,6 +157,88 @@ def rename(character_id: str, body: Rename):
     return {"character_id": character_id, "name": body.name.strip()[:60]}
 
 
+@router.post("/api/characters/{character_id}/is/{other_id}")
+def merge(character_id: str, other_id: str):
+    """Two faces, one person.
+
+    Face matching splits people it should not — a back-of-head shot and a
+    close-up genuinely do not look alike. Rather than pretend otherwise, the
+    AD says so once and every take moves across.
+    """
+    if character_id == other_id:
+        return {"ok": False, "reason": "same person"}
+
+    ch = client()
+    rows = ch.query(
+        f"SELECT character_id, name, appearances FROM {DB}.characters FINAL "
+        f"WHERE character_id IN (%(a)s, %(b)s)",
+        parameters={"a": character_id, "b": other_id},
+    ).result_rows
+    if len(rows) != 2:
+        return {"ok": False, "reason": "not found"}
+
+    # keep whichever has been seen more; it has the better face crop
+    by_id = {r[0]: r for r in rows}
+    keep, drop = sorted(
+        (by_id[character_id], by_id[other_id]), key=lambda r: -r[2]
+    )
+
+    # character_id is part of the sort key on both tables, so it cannot be
+    # updated in place. Copy the rows across under the surviving id, then drop
+    # the originals.
+    moved = ch.query(
+        f"""
+        SELECT production_id, scene_id, setup_id, take_id, confidence, bbox,
+               prominence, matched_by
+        FROM {DB}.take_characters WHERE character_id = %(d)s
+        """,
+        parameters={"d": drop[0]},
+    ).result_rows
+    if moved:
+        ch.insert(
+            "take_characters",
+            [[r[0], r[1], r[2], r[3], keep[0], r[4], list(r[5]), r[6], "merged"]
+             for r in moved],
+            column_names=["production_id", "scene_id", "setup_id", "take_id",
+                          "character_id", "confidence", "bbox", "prominence",
+                          "matched_by"],
+        )
+    ch.command(
+        f"ALTER TABLE {DB}.take_characters DELETE WHERE character_id = %(d)s",
+        parameters={"d": drop[0]},
+    )
+
+    needs = ch.query(
+        f"""
+        SELECT scene_id, shot_type, required, recover_cost_usd
+        FROM {DB}.character_requirements FINAL WHERE character_id = %(d)s
+        """,
+        parameters={"d": drop[0]},
+    ).result_rows
+    if needs:
+        ch.insert(
+            "character_requirements",
+            [[r[0], keep[0], r[1], r[2], r[3], datetime.now()] for r in needs],
+            column_names=["scene_id", "character_id", "shot_type", "required",
+                          "recover_cost_usd", "updated_at"],
+        )
+    ch.command(
+        f"ALTER TABLE {DB}.character_requirements DELETE "
+        f"WHERE character_id = %(d)s",
+        parameters={"d": drop[0]},
+    )
+    ch.command(
+        f"ALTER TABLE {DB}.characters UPDATE appearances = %(n)s "
+        f"WHERE character_id = %(k)s",
+        parameters={"n": keep[2] + drop[2], "k": keep[0]},
+    )
+    ch.command(
+        f"ALTER TABLE {DB}.characters DELETE WHERE character_id = %(d)s",
+        parameters={"d": drop[0]},
+    )
+    return {"ok": True, "kept": keep[0], "name": keep[1], "removed": drop[0]}
+
+
 # --- coverage, per person ---------------------------------------------------
 
 @router.get("/api/scenes/{scene_id}/matrix")

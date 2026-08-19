@@ -49,7 +49,7 @@ FACES_DIR.mkdir(parents=True, exist_ok=True)
 # separates them. So the embedding is used only to shortlist: it narrows eight
 # candidates to three, and Gemini looks at the faces and decides.
 SHORTLIST_DISTANCE = 0.60
-SHORTLIST_SIZE = 3
+SHORTLIST_SIZE = 6
 
 FACE_PAD = 0.35          # crop this much around the detected box
 MIN_FACE_PX = 48         # anything smaller is background, not a character
