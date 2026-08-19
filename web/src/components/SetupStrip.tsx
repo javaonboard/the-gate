@@ -9,6 +9,16 @@ import { useEffect, useState } from "react";
  *  each clip under its own setup, named after the framing, rather than
  *  quietly mixing unrelated angles together. */
 
+const FRAMING: Record<string, string> = {
+  ELS: "very wide",
+  LS: "wide",
+  MLS: "wide-ish",
+  MS: "medium",
+  MCU: "medium close",
+  CU: "close-up",
+  ECU: "very close",
+};
+
 type Setup = {
   setup_id: string;
   label: string;
@@ -51,15 +61,22 @@ export function SetupStrip({ sceneId, selected, onSelect, reloadKey }: {
 
   return (
     <div className="strip">
-      <span className="strip-label">Camera positions</span>
+      <div className="strip-label">
+        Camera positions
+        <small>
+          each one is a place the camera stands — a wide, a close-up, an
+          over-the-shoulder. Several attempts get shot from each.
+        </small>
+      </div>
 
       <button
-        className="chip"
+        className="chip auto"
         data-active={selected === ""}
         onClick={() => onSelect("")}
-        title="Let the system file each clip by its framing"
+        title="Each clip gets filed under its own position, by framing"
       >
-        auto
+        <b>auto</b>
+        <small>sort it for me</small>
       </button>
 
       {setups.map((s) => (
@@ -69,19 +86,28 @@ export function SetupStrip({ sceneId, selected, onSelect, reloadKey }: {
           data-active={selected === s.setup_id}
           data-shot={s.shot}
           onClick={() => onSelect(s.setup_id)}
-          title={
-            s.takes
-              ? `${s.takes} take${s.takes > 1 ? "s" : ""}${s.shot_size ? ` · ${s.shot_size}` : ""}`
-              : "Nothing shot here yet"
-          }
+          title={`Position ${s.label} — one place the camera stands. `
+            + (s.takes ? `${s.takes} attempt(s) recorded here.` : "Nothing shot here yet.")}
         >
-          {s.label}
-          {s.takes > 0 && <span className="chip-count">{s.takes}</span>}
+          <b>
+            {s.label}
+            {s.shot_size && (
+              <span className="chip-framing">
+                {FRAMING[s.shot_size] ?? s.shot_size.toLowerCase()}
+              </span>
+            )}
+          </b>
+          <small>
+            {s.takes === 0
+              ? "not shot"
+              : `${s.takes} take${s.takes > 1 ? "s" : ""}`}
+          </small>
         </button>
       ))}
 
-      <button className="chip add" onClick={add} disabled={adding}>
-        ＋
+      <button className="chip add" onClick={add} disabled={adding} title="Plan another camera position">
+        <b>＋</b>
+        <small>position</small>
       </button>
     </div>
   );

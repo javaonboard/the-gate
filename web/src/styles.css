@@ -452,49 +452,70 @@ button.primary:disabled { opacity: 0.5; cursor: default; }
 
 .matrix-key b { font-family: var(--mono); color: var(--text); }
 
+
 /* --- camera positions ---------------------------------------------------- */
 
 .strip {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 7px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .strip-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 190px;
+  margin-right: 10px;
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
-  margin-right: 6px;
+}
+
+.strip-label small {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--faint);
+  line-height: 1.35;
 }
 
 .chip {
-  position: relative;
-  min-width: 38px;
-  padding: 6px 11px;
-  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  min-width: 78px;
+  padding: 7px 11px;
+  border-radius: 9px;
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
   font: inherit;
-  font-size: 13px;
   cursor: pointer;
+  text-align: left;
 }
 
-.chip:hover { color: var(--text); border-color: var(--faint); }
+.chip b { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.chip small { font-size: 11px; color: var(--faint); }
+
+.chip:hover { border-color: var(--faint); }
 .chip[data-active="true"] {
-  color: var(--text);
   border-color: var(--accent);
   background: rgba(122, 162, 255, 0.1);
 }
-.chip[data-shot="true"] { color: var(--text); }
-.chip.add { color: var(--faint); font-size: 14px; }
+.chip[data-shot="false"] b { color: var(--muted); }
 
-.chip-count {
-  margin-left: 6px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--faint);
+.chip-framing {
+  margin-left: 7px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
 }
+
+.chip.add { justify-content: center; min-width: 62px; }
+.chip.add b { color: var(--faint); }
