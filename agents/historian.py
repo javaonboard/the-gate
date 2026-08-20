@@ -201,7 +201,17 @@ How to answer:
 - Keep it to a couple of sentences unless asked for the breakdown.
 
 If a question needs data the typed tools do not cover, query the cluster
-directly through the ClickHouse tools and explain what you looked at."""
+directly through the ClickHouse tools and explain what you looked at.
+
+The tables you can reach are curated views, not the raw record:
+  scene_status     one row per scene — where, how much shot, who is in it
+  take_log         every take, with its framing, focus and any problems
+  dp_pace          how long each DP takes, by conditions
+  person_coverage  which framings exist of which person, per scene
+  world_log        what was happening outside, with sources
+
+They are read-only and capped. Prefer them over clever SQL — they already
+carry the definitions everyone else in the system uses."""
 
 
 def build_agent(callbacks: dict | None = None, with_mcp: bool = True):
