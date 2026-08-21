@@ -15,11 +15,12 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, Request, Response, UploadFile
 from pydantic import BaseModel
 
 from agents import casting
 from api.events import bus
+from api import workspace as ws
 from core import character_coverage as cc
 from core.coverage import connect
 
@@ -42,26 +43,28 @@ def client():
 # --- the scenes -------------------------------------------------------------
 
 @router.get("/api/scenes")
-def scenes():
+def scenes(request: Request, response: Response):
     """Every scene in the day's work.
 
     A scene is one continuous piece of story in one place — the canal street,
     the workshop. It is the unit people actually talk about, and the unit
     footage gets shot into.
     """
-    rows = client().query(
+    ch = client()
+    mine = ws.read_from(ch, ws.workspace_id(request, response))
+    rows = ch.query(
         f"""
         SELECT s.scene_id, s.location_id, s.int_ext, s.day_night, s.synopsis,
                uniqExact(t.take_id) AS takes,
                uniqExact(t.setup_id) AS positions
         FROM {DB}.scenes AS s
         LEFT JOIN {DB}.takes AS t ON t.scene_id = s.scene_id
-        WHERE s.production_id = 'prod_now'
+        WHERE s.production_id = %(p)s
         GROUP BY s.scene_id, s.location_id, s.int_ext, s.day_night, s.synopsis
         ORDER BY s.scene_id
-        """
+        """,
+        parameters={"p": mine},
     ).result_rows
-    ch = client()
     out = []
     for r in rows:
         # Each scene carries its own state, so the AD can see which ones are
@@ -96,20 +99,24 @@ class NewScene(BaseModel):
 
 
 @router.post("/api/scenes")
-def add_scene(body: NewScene):
+def add_scene(body: NewScene, request: Request, response: Response):
     """Start a new scene — somewhere else, or another time of day."""
     ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+
     used = [
         int(r[0].split("sc")[-1])
         for r in ch.query(
-            f"SELECT scene_id FROM {DB}.scenes WHERE production_id = 'prod_now'"
+            f"SELECT scene_id FROM {DB}.scenes WHERE production_id = %(p)s",
+            parameters={"p": mine},
         ).result_rows
     ]
     n = (max(used) + 1) if used else 1
-    scene_id = f"prod_now_sc{n:03d}"
+    scene_id = f"{mine}_sc{n:03d}"
 
     ch.insert("scenes", [[
-        "prod_now", scene_id, float(n), 12,
+        mine, scene_id, float(n), 12,
         "INT" if body.interior else "EXT", body.when.upper(), "dialogue",
         body.place.strip().replace(" ", "_")[:60] or f"location_{n}",
         [], "",
@@ -127,8 +134,10 @@ class Rename(BaseModel):
 
 
 @router.get("/api/scenes/{scene_id}/cast")
-def cast(scene_id: str):
-    rows = client().query(
+def cast(scene_id: str, request: Request, response: Response):
+    ch = client()
+    scene_id = ws.scene_for(ch, ws.workspace_id(request, response), scene_id)
+    rows = ch.query(
         f"""
         SELECT c.character_id, c.name, c.face_uri, c.appearances, c.description
         FROM {DB}.characters AS c
@@ -147,18 +156,26 @@ def cast(scene_id: str):
 
 
 @router.patch("/api/characters/{character_id}")
-def rename(character_id: str, body: Rename):
+def rename(character_id: str, body: Rename,
+           request: Request, response: Response):
     """The one thing a person types: what this face is called."""
-    client().command(
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+    character_id = ws.character_for(ch, mine, character_id)
+
+    ch.command(
         f"ALTER TABLE {DB}.characters UPDATE name = %(n)s "
-        f"WHERE character_id = %(c)s",
-        parameters={"n": body.name.strip()[:60], "c": character_id},
+        f"WHERE character_id = %(c)s AND production_id = %(p)s",
+        parameters={"n": body.name.strip()[:60], "c": character_id, "p": mine},
+        settings={"mutations_sync": 1},
     )
     return {"character_id": character_id, "name": body.name.strip()[:60]}
 
 
 @router.post("/api/characters/{character_id}/is/{other_id}")
-def merge(character_id: str, other_id: str):
+def merge(character_id: str, other_id: str,
+          request: Request, response: Response):
     """Two faces, one person.
 
     Face matching splits people it should not — a back-of-head shot and a
@@ -169,6 +186,11 @@ def merge(character_id: str, other_id: str):
         return {"ok": False, "reason": "same person"}
 
     ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+    character_id = ws.character_for(ch, mine, character_id)
+    other_id = ws.character_for(ch, mine, other_id)
+
     rows = ch.query(
         f"SELECT character_id, name, appearances FROM {DB}.characters FINAL "
         f"WHERE character_id IN (%(a)s, %(b)s)",
@@ -242,8 +264,10 @@ def merge(character_id: str, other_id: str):
 # --- coverage, per person ---------------------------------------------------
 
 @router.get("/api/scenes/{scene_id}/matrix")
-def coverage_matrix(scene_id: str):
-    rows = cc.matrix(client(), scene_id)
+def coverage_matrix(scene_id: str, request: Request, response: Response):
+    ch = client()
+    scene_id = ws.scene_for(ch, ws.workspace_id(request, response), scene_id)
+    rows = cc.matrix(ch, scene_id)
     return {"scene_id": scene_id, "bands": cc.BANDS,
             "band_help": cc.BAND_HELP, "band_label": cc.BAND_LABEL,
             "characters": cc.as_json(rows), "summary": cc.summarise(rows)}
@@ -255,10 +279,17 @@ class BandSetting(BaseModel):
 
 
 @router.put("/api/scenes/{scene_id}/need/{character_id}/{band}")
-def set_need(scene_id: str, character_id: str, band: str, body: BandSetting):
+def set_need(scene_id: str, character_id: str, band: str, body: BandSetting,
+             request: Request, response: Response):
     """Tick a shot on or off for one person. The call reruns from this."""
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+    scene_id = ws.scene_for(ch, mine, scene_id)
+    character_id = ws.character_for(ch, mine, character_id)
+
     cost = body.recover_cost_usd or cc.DEFAULT_COST.get(band, 20000)
-    client().insert(
+    ch.insert(
         "character_requirements",
         [[scene_id, character_id, band, int(body.required), cost, datetime.now()]],
         column_names=["scene_id", "character_id", "shot_type", "required",
@@ -463,10 +494,16 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
 
 
 @router.post("/api/scenes/{scene_id}/footage")
-async def upload_footage(scene_id: str, background: BackgroundTasks,
+async def upload_footage(scene_id: str, request: Request, response: Response,
+                         background: BackgroundTasks,
                          files: list[UploadFile] = File(...),
                          setup_id: str = Form("")):
     """Drop clips here. Everything after this is automatic."""
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+    scene_id = ws.scene_for(ch, mine, scene_id)
+
     run = bus.start(scene_id)
     run.publish("orchestrator", "started",
                 f"{len(files)} clip(s) off the card")

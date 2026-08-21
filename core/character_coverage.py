@@ -99,8 +99,11 @@ def matrix(client, scene_id: str) -> list[CharacterRow]:
     cast = client.query(
         f"""
         SELECT c.character_id, c.name, c.face_uri, c.appearances
-        FROM {DB}.characters AS c
-        WHERE c.character_id IN (
+        FROM {DB}.characters AS c FINAL
+        WHERE c.production_id = (
+            SELECT any(production_id) FROM {DB}.scenes WHERE scene_id = %(s)s
+        )
+        AND c.character_id IN (
             SELECT character_id FROM {DB}.take_characters
             WHERE scene_id = %(s)s AND prominence = 'foreground'
         )

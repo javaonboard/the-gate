@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from agents.orchestrator import Trigger, run_gate
 from api.casting_routes import router as casting_router
+from api import workspace as ws
 from api.events import bus, sse
 from api.labels import AGENTS, GLOSSARY, MOVEMENTS, SHOT_SIZES, person_label
 from core.coverage import connect
@@ -106,7 +107,8 @@ async def _do_gate(run, scene_id: str, hours_in: float, use_agent: bool,
 
 
 @app.post("/api/runs")
-async def start_run(scene_id: str = DEFAULT_SCENE, hours_in: float = 9.0,
+async def start_run(request: Request, response: Response,
+                    scene_id: str = DEFAULT_SCENE, hours_in: float = 9.0,
                     use_agent: bool = True, trigger: str = "schedule"):
     """Start a check and return immediately.
 
@@ -114,6 +116,8 @@ async def start_run(scene_id: str = DEFAULT_SCENE, hours_in: float = 9.0,
     the stream after everything has already happened and the crew appears to
     finish instantly. The call itself arrives as a `result` event on the stream.
     """
+    scene_id = ws.scene_for(client(), ws.workspace_id(request, response),
+                            scene_id)
     run = bus.start(scene_id)
     asyncio.create_task(_do_gate(run, scene_id, hours_in, use_agent, trigger))
     return {"run_id": run.run_id, "scene_id": scene_id}
