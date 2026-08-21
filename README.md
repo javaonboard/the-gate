@@ -83,13 +83,13 @@ New footage on the card ──┤
                           ▼
               Orchestrator  (ADK on Vertex AI Agent Engine)
                           │
-  ┌────────────┬──────────┼──────────┬────────────┬────────────┐
-  ▼            ▼          ▼          ▼            ▼            ▼
-Continuity  Historian   Vision     Scout     Compliance   Control Room
-scene deps  ClickHouse  Gemini    Parallel   union rules   Grafana MCP
-180°/eyeline  via MCP   per take   Monitor/   turnaround    metrics,
-            distributions          Task/      meals,        alerts,
-                                   Search     minors        incidents
+  ┌────────────┬──────────┼──────────┬────────────┐
+  ▼            ▼          ▼          ▼            ▼
+Continuity  Historian   Vision     Scout     Compliance
+will it cut ClickHouse  Gemini    Parallel   union rules
+QC, casting  via MCP   per take   Monitor/   turnaround,
+            distributions         Task/      meals, minors
+                                  Search
                           │
                           ▼
             Day Simulator — 10,000 trial Monte Carlo
@@ -97,8 +97,6 @@ scene deps  ClickHouse  Gemini    Parallel   union rules   Grafana MCP
 ```
 
 **ClickHouse** is the production's memory. Every setup, take, per-second frame and analysis. `quantilesTDigest` builds the duration distributions the simulator samples from; `ASOF JOIN` lines takes up against whatever the world was doing at that moment.
-
-**Grafana** is its nervous system and its hands. The agent pushes live shoot-day metrics, writes its own alert rules when it spots a new risk, annotates the timeline, and declares an incident when a gate call comes back no-go — narrating its reasoning into the incident as it goes.
 
 **Parallel** is everything outside the fence. Monitor subscriptions push weather, road closures, permit changes and union bulletins in as they happen. Task API does the cited research, and the citations are shown in the interface rather than buried.
 

@@ -26,28 +26,25 @@ const NODES: NodeSpec[] = [
   { key: "scout", label: "Scout", sub: "location scout", pos: [3.4, 3.0, -0.8], kind: "crew" },
   { key: "compliance", label: "Steward", sub: "union rules", pos: [5.4, 0.2, 1.0], kind: "crew" },
   { key: "planner", label: "1st AD", sub: "makes the call", pos: [2.6, -3.2, -0.6], kind: "crew" },
-  { key: "control_room", label: "Video Village", sub: "puts it on screen", pos: [0.4, -5.0, 0.6], kind: "crew" },
 
   { key: "simulator", label: "The Clock", sub: "10,000 runs · numpy", pos: [0, 3.6, 1.4], kind: "maths" },
 
   { key: "src_gemini", label: "Gemini", sub: "watches the footage", pos: [-8.6, 4.0, -1.6], kind: "source" },
   { key: "src_clickhouse", label: "ClickHouse", sub: "7.4M rows of history", pos: [-7.2, -5.0, -1.4], kind: "source" },
   { key: "src_parallel", label: "Parallel", sub: "the world outside", pos: [7.2, 5.0, -2.0], kind: "source" },
-  { key: "src_grafana", label: "Grafana", sub: "where the crew looks", pos: [3.0, -6.4, -1.8], kind: "source" },
 ];
 
 const EDGES: [string, string][] = [
   ["vision", "orchestrator"], ["script", "orchestrator"],
   ["historian", "orchestrator"], ["scout", "orchestrator"],
   ["compliance", "orchestrator"], ["planner", "orchestrator"],
-  ["control_room", "orchestrator"], ["simulator", "orchestrator"],
+  ["simulator", "orchestrator"],
   ["src_gemini", "vision"], ["src_gemini", "script"],
   ["src_gemini", "casting"], ["casting", "orchestrator"],
   ["casting", "src_clickhouse"],
   ["src_clickhouse", "historian"], ["historian", "simulator"],
   ["src_parallel", "scout"], ["scout", "simulator"],
   ["compliance", "simulator"], ["simulator", "planner"],
-  ["control_room", "src_grafana"],
 ];
 
 const COLOUR: Record<NodeSpec["kind"], number> = {
@@ -61,7 +58,6 @@ const COLOUR: Record<NodeSpec["kind"], number> = {
 const SOURCE_OF: Record<string, string> = {
   historian: "src_clickhouse",
   scout: "src_parallel",
-  control_room: "src_grafana",
   vision: "src_gemini",
   script: "src_gemini",
   casting: "src_gemini",

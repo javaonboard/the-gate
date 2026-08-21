@@ -65,11 +65,6 @@ AGENTS: dict[str, dict[str, str]] = {
         "role": "Assistant Director",
         "does": "Decides what to shoot next and what to let go",
     },
-    "control_room": {
-        "name": "Video Village",
-        "role": "Monitoring",
-        "does": "Puts the call on screen and raises the alarm",
-    },
 }
 
 

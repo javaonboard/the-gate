@@ -23,7 +23,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from agents import control_room, historian, scout
+from agents import historian, scout
 from api.events import Run, adk_callbacks, step
 from core.coverage import connect
 from core.gate import GateReport, build_report
@@ -101,7 +101,6 @@ def build_agent(run: Run | None = None, with_mcp: bool = True):
         sub_agents=[
             scout.build_agent(cb("scout")),
             historian.build_agent(cb("historian"), with_mcp=with_mcp),
-            control_room.build_agent(cb("control_room")),
         ],
         **cb("orchestrator"),
     )
@@ -240,21 +239,6 @@ async def run_gate(scene_id: str, now: datetime, call: datetime,
             if run:
                 run.publish("orchestrator", "error",
                             f"Falling back to the computed call: {exc}")
-
-    if run:
-        run.publish("control_room", "tool_call",
-                    "Marking the timeline in Grafana",
-                    {"tool": "grafana.mark_timeline"})
-    try:
-        control_room.mark_timeline(
-            f"{report.verdict} — {spoken}"[:500],
-            tags=["the-gate", report.verdict.lower(), scene_id],
-        )
-        if run:
-            run.publish("control_room", "tool_result", "Timeline marked")
-    except Exception as exc:
-        if run:
-            run.publish("control_room", "error", f"Grafana write failed: {exc}")
 
     return {"report": report, "spoken": spoken, "brief": brief}
 
