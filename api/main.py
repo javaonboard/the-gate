@@ -150,20 +150,16 @@ def serialise(report) -> dict[str, Any]:
         "summary": report.summary(),
         "coverage": {
             "completeness": round(report.coverage.completeness, 3),
-            "takes": len(report.coverage.takes),
+            "people": report.coverage.people,
+            "have": report.coverage.summary["have"],
+            "required": report.coverage.summary["required"],
             "exposure_usd": report.coverage.exposure_usd,
-            "requirements": [
-                {
-                    "req_id": r.req_id,
-                    "shot_type": r.shot_type,
-                    "shot_type_plain": GLOSSARY.get(r.shot_type, {}).get("short", r.shot_type),
-                    "subject": r.subject,
-                    "priority": r.priority,
-                    "satisfied": r.satisfied,
-                    "satisfied_by": r.satisfied_by,
-                    "recover_cost_usd": r.recover_cost_usd,
-                }
-                for r in report.coverage.requirements
+            "missing": [
+                {"character_id": m.character_id, "person": m.person,
+                 "band": m.band, "label": m.label,
+                 "describe": m.describe,
+                 "recover_cost_usd": m.recover_cost_usd}
+                for m in report.coverage.missing()
             ],
         },
         "day": {
@@ -177,8 +173,9 @@ def serialise(report) -> dict[str, Any]:
         },
         "options": [
             {
-                "shot_type": o.requirement.shot_type,
-                "subject": o.requirement.subject,
+                "shot_type": o.requirement.label,
+                "subject": o.requirement.person,
+                "describe": o.requirement.describe,
                 "shoot_now_usd": round(o.shoot_now_usd),
                 "recover_later_usd": o.recover_later_usd,
                 "saving_usd": round(o.saving_usd),

@@ -56,16 +56,14 @@ body {
 
 .shell {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   height: 100%;
-  gap: 14px;
+  gap: 12px;
   padding: 14px;
   background: var(--bg);
 }
 
 .topbar {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 22px;
@@ -622,3 +620,27 @@ button.primary:disabled { opacity: 0.45; cursor: default; }
   border: 3px solid var(--panel);
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+/* --- what the system is doing right now ---------------------------------- */
+
+.activity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: 12.5px;
+  justify-self: start;
+  animation: rise 0.2s ease;
+}
+
+.activity[data-busy="false"] { background: var(--go-wash); color: var(--go); }
+.activity b { font-weight: 650; }
+.activity .tick { font-size: 12px; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from core.coverage import GateDecision, Requirement, evaluate
+from core import character_coverage as cc
 from core.simulator import (
     PendingSetup,
     SimulationResult,
@@ -24,10 +24,25 @@ from core.union_rules import Person
 
 
 @dataclass
-class RecoveryOption:
-    """One missing requirement, priced both ways."""
+class Missing:
+    """A shot this scene needs and does not have."""
 
-    requirement: Requirement
+    character_id: str
+    person: str
+    band: str
+    label: str
+    recover_cost_usd: int
+
+    @property
+    def describe(self) -> str:
+        return f"{self.label} of {self.person}"
+
+
+@dataclass
+class RecoveryOption:
+    """One missing shot, priced both ways."""
+
+    requirement: Missing
     shoot_now_usd: float          # extra penalty cost from staying longer
     recover_later_usd: int        # cost of a pickup
     p_make_day_after: float       # odds of making the day if we shoot it
@@ -50,10 +65,42 @@ class RecoveryOption:
 
 
 @dataclass
+class Coverage:
+    """What the scene has, per person. The same numbers the table shows."""
+
+    rows: list
+    summary: dict
+
+    @property
+    def go(self) -> bool:
+        return not self.summary["missing"]
+
+    @property
+    def completeness(self) -> float:
+        return self.summary["completeness"]
+
+    @property
+    def exposure_usd(self) -> int:
+        return self.summary["exposure_usd"]
+
+    @property
+    def people(self) -> int:
+        return self.summary["characters"]
+
+    def missing(self) -> list[Missing]:
+        return [
+            Missing(character_id=m["character_id"], person=m["name"],
+                    band=m["band"], label=m["label"],
+                    recover_cost_usd=m["recover_cost_usd"])
+            for m in self.summary["missing"]
+        ]
+
+
+@dataclass
 class GateReport:
     scene_id: str
     now: datetime
-    coverage: GateDecision
+    coverage: Coverage
     baseline: SimulationResult
     options: list[RecoveryOption] = field(default_factory=list)
 
@@ -81,28 +128,28 @@ class GateReport:
         """The one sentence an AD needs."""
         p = self.baseline.p_make_the_day
         if self.go:
-            return (f"Covered. {p:.0%} chance of making the day, "
+            return (f"Everyone's covered. {p:.0%} chance of making the day, "
                     f"hard stop {self.baseline.hard_stop:%H:%M}.")
 
+        gaps = self.coverage.missing()
         rec = self.recommended
+
         if not rec:
-            blocking = ", ".join(f"{r.shot_type} {r.subject}".strip()
-                                 for r in self.coverage.blocking)
-            return (f"Missing {blocking}, but staying costs more than the pickup. "
+            names = ", ".join(m.describe for m in gaps[:2])
+            return (f"Short a {names}, but staying costs more than the pickup. "
                     f"Wrap and schedule it.")
 
         first = rec[0]
-        others = len(rec) - 1
-        tail = f" Plus {others} more worth grabbing." if others else ""
+        others = len(gaps) - 1
+        tail = (f" {others} more still short." if others > 0 else "")
         return (
-            f"{p:.0%} chance of making the day. Missing "
-            f"{first.requirement.shot_type} {first.requirement.subject}".strip()
-            + f" — {first.verdict}. Odds drop to "
-              f"{first.p_make_day_after:.0%} if you shoot it.{tail}"
+            f"{p:.0%} chance of making the day. Short a "
+            f"{first.requirement.describe} — {first.verdict}. "
+            f"Odds drop to {first.p_make_day_after:.0%} if you shoot it.{tail}"
         )
 
 
-def _recovery_setup(req: Requirement, template: PendingSetup) -> PendingSetup:
+def _recovery_setup(req: Missing, template: PendingSetup) -> PendingSetup:
     """A hypothetical setup to capture a missing requirement.
 
     Modelled on a setup already in this scene, so the duration distribution it
@@ -110,8 +157,8 @@ def _recovery_setup(req: Requirement, template: PendingSetup) -> PendingSetup:
     """
     return replace(
         template,
-        setup_id=f"recover_{req.req_id}",
-        label=f"{req.shot_type} {req.subject}".strip(),
+        setup_id=f"recover_{req.character_id}_{req.band}",
+        label=req.describe,
     )
 
 
@@ -119,7 +166,8 @@ def build_report(client, scene_id: str, now: datetime, call: datetime,
                  crew: list[Person], next_call: datetime,
                  completed_setup_ids: set[str] | None = None,
                  trials: int = 10_000, distant: bool = False) -> GateReport:
-    coverage = evaluate(client, scene_id)
+    rows = cc.matrix(client, scene_id)
+    coverage = Coverage(rows=rows, summary=cc.summarise(rows))
 
     remaining = pending_setups(client, scene_id, completed_setup_ids)
     baseline = simulate(client, remaining, now=now, call=call, crew=crew,
@@ -129,7 +177,9 @@ def build_report(client, scene_id: str, now: datetime, call: datetime,
     template = remaining[0] if remaining else None
 
     if template is not None:
-        for req in coverage.ranked_missing():
+        # most expensive to recover first — that is the one worth the argument
+        for req in sorted(coverage.missing(),
+                          key=lambda m: -m.recover_cost_usd):
             with_recovery = remaining + [_recovery_setup(req, template)]
             after = simulate(client, with_recovery, now=now, call=call, crew=crew,
                              next_call=next_call, trials=trials, distant=distant)
@@ -150,7 +200,7 @@ def render(report: GateReport) -> str:
         f"{report.verdict}   {report.scene_id}   {report.now:%H:%M}",
         "",
         f"coverage        {report.coverage.completeness:.0%}"
-        f"   ({len(report.coverage.takes)} takes)",
+        f"   ({report.coverage.people} people)",
         f"make the day    {b.p_make_the_day:.0%}"
         f"   hard stop {b.hard_stop:%H:%M}"
         f"   median wrap {b.median_wrap:%H:%M}",
@@ -161,7 +211,7 @@ def render(report: GateReport) -> str:
     if report.options:
         lines.append("missing, priced both ways:")
         for o in sorted(report.options, key=lambda o: -o.saving_usd):
-            name = f"{o.requirement.shot_type} {o.requirement.subject}".strip()
+            name = o.requirement.describe
             mark = "+" if o.worth_it else "-"
             lines.append(
                 f"  {mark} {name:22s} now ${o.shoot_now_usd:>8,.0f}"

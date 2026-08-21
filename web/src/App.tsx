@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StatusRail } from "./components/StatusRail";
+import { ActivityLine } from "./components/ActivityLine";
 import type { Scene } from "./components/SceneBar";
 import { Today } from "./screens/Today";
 import { useRun } from "./useRun";
@@ -73,6 +73,8 @@ export default function App() {
         </div>
       </header>
 
+      <ActivityLine events={events} busy={busy} />
+
       <main>
         {error && (
           <div className="empty" style={{ color: "var(--nogo)" }}>
@@ -92,7 +94,6 @@ export default function App() {
         />
       </main>
 
-      <StatusRail events={events} busy={busy} />
     </div>
   );
 }

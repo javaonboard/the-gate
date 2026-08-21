@@ -166,8 +166,10 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
         f"Trigger: {trigger.headline}. {trigger.detail}".strip(),
         f"Scene {report.scene_id} at {report.now:%H:%M}.",
         "",
-        f"Coverage: {report.coverage.completeness:.0%} "
-        f"({len(report.coverage.takes)} takes logged).",
+        f"Coverage: {report.coverage.completeness:.0%} — "
+        f"{report.coverage.summary['have']} of "
+        f"{report.coverage.summary['required']} shots across "
+        f"{report.coverage.people} people on camera.",
         f"Odds of making the day: {b.p_make_the_day:.0%} over {b.trials:,} runs.",
         f"Hard stop {b.hard_stop:%H:%M}. Likely wrap {b.median_wrap:%H:%M}, "
         f"{b.p90_wrap:%H:%M} on a slow finish.",
@@ -178,7 +180,7 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
     if report.options:
         lines += ["", "Missing, priced both ways:"]
         for o in sorted(report.options, key=lambda o: -o.saving_usd):
-            name = f"{o.requirement.shot_type} {o.requirement.subject}".strip()
+            name = o.requirement.describe
             lines.append(
                 f"- {name}: ${o.shoot_now_usd:,.0f} to shoot now, "
                 f"${o.recover_later_usd:,} to pick up later, "
