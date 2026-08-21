@@ -416,7 +416,8 @@ def _probe_duration(path: Path) -> float:
         return 0.0
 
 
-def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
+def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run,
+            finish: bool = True, precomputed: dict | None = None) -> None:
     """Watch each clip, find the faces, write it all down."""
     from agents.vision import analyse_clip
     from google import genai
@@ -447,11 +448,13 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
         take_id = path.stem
         duration = _probe_duration(path)
 
-        run.publish("vision", "working", f"Watching {take_id}")
-        analysis = analyse_clip(gclient, {
-            "clip_name": take_id, "camera_roll": take_id.split("_")[0],
-            "duration_s": duration, "start_s": 0.0, "path": str(path),
-        })
+        analysis = (precomputed or {}).get(take_id)
+        if analysis is None:
+            run.publish("vision", "working", f"Watching {take_id}")
+            analysis = analyse_clip(gclient, {
+                "clip_name": take_id, "camera_roll": take_id.split("_")[0],
+                "duration_s": duration, "start_s": 0.0, "path": str(path),
+            })
         run.publish("vision", "tool_result",
                     f"{take_id}: {analysis['shot_size']}, "
                     f"{analysis['subjects_count']} in frame")
@@ -460,6 +463,7 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
         # setup of its own named after the framing, so nothing is silently
         # lumped in with an unrelated camera position.
         setup_id = setup_hint or f"{scene_id}_{analysis['shot_size']}"
+
         if not setup_hint:
             exists = ch.query(
                 f"SELECT count() FROM {DB}.setups WHERE setup_id = %(u)s",
@@ -539,7 +543,150 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
                     f"{len(links)} face(s), {fresh} new"
                     if links else "no faces found")
 
-    run.publish("orchestrator", "done", f"{len(paths)} clip(s) taken in")
+    if finish:
+        run.publish("orchestrator", "done", f"{len(paths)} clip(s) taken in")
+        run.finish()
+
+
+def _split_into_shots(source: Path, run) -> list[Path]:
+    """Cut a long file at every camera change.
+
+    A whole film is not a take. Every cut in it is a different camera position,
+    which is what the coverage question is actually about, so the file has to
+    be broken at those cuts before anything else can make sense of it.
+    """
+    from data.split_takes import cut, detect_cuts, duration_of
+
+    run.publish("vision", "working", f"Finding the cuts in {source.name}")
+    boundaries = detect_cuts(source, 0.35, 0.0, 0.0)
+    end = duration_of(source)
+    marks = [0.0] + boundaries + [end]
+
+    run.publish("vision", "tool_result",
+                f"{max(0, len(marks) - 2)} cuts found in "
+                f"{end / 60:.0f} minutes")
+
+    roll = f"U{uuid.uuid4().hex[:3].upper()}"
+    made: list[Path] = []
+    for i in range(len(marks) - 1):
+        a, b = marks[i], marks[i + 1]
+        if b - a < 1.5:            # flash frames are not shots
+            continue
+        out = CLIPS_DIR / f"{roll}_C{len(made) + 1:03d}.mp4"
+        cut(source, out, a, b)
+        made.append(out)
+
+    run.publish("vision", "tool_result", f"{len(made)} shots cut")
+    return made
+
+
+def _place_by_location(ch, run, workspace: str, clips: list[Path],
+                       analyses: dict) -> dict[str, str]:
+    """Group shots into scenes by where they were filmed.
+
+    Nobody tells us where a scene starts and ends. But shots from the same
+    place belong together, and that is what a scene is — so the location the
+    Vision Agent reports becomes the scene, and a place we have not seen before
+    becomes a new one.
+    """
+    existing = {
+        r[1].replace("_", " "): r[0] for r in ch.query(
+            f"SELECT scene_id, location_id FROM {DB}.scenes "
+            f"WHERE production_id = %(p)s",
+            parameters={"p": workspace},
+        ).result_rows
+    }
+    used = [int(sid.split("sc")[-1]) for sid in existing.values()] or [0]
+    nxt = max(used) + 1
+
+    placed: dict[str, str] = {}
+    for clip in clips:
+        analysis = analyses.get(clip.stem, {})
+        place = (analysis.get("location_label") or "unsorted").strip().lower()
+
+        if place not in existing:
+            scene_id = f"{workspace}_sc{nxt:03d}"
+            ch.insert("scenes", [[
+                workspace, scene_id, float(nxt), 12, "EXT", "DAY", "dialogue",
+                place.replace(" ", "_")[:60],
+                [], analysis.get("scene_summary", "")[:180],
+            ]], column_names=["production_id", "scene_id", "script_page",
+                              "page_eighths", "int_ext", "day_night",
+                              "scene_type", "location_id", "characters",
+                              "synopsis"])
+            existing[place] = scene_id
+            nxt += 1
+            run.publish("script", "tool_result", f"New scene: {place}")
+
+        placed[clip.stem] = existing[place]
+
+    return placed
+
+
+@router.post("/api/film")
+async def upload_film(request: Request, response: Response,
+                      file: UploadFile = File(...)):
+    """Drop a whole film in and let it sort itself.
+
+    Split at the cuts, watch every shot, group them into scenes by location,
+    find the faces, check for problems. Nobody types anything.
+    """
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+
+    name = Path(file.filename or f"film_{uuid.uuid4().hex[:6]}.mp4").name
+    target = CLIPS_DIR.parent / name
+    with target.open("wb") as out:
+        shutil.copyfileobj(file.file, out)
+
+    run = bus.start(mine)
+    run.publish("orchestrator", "started", f"Taking in {name}")
+    asyncio.create_task(asyncio.to_thread(_ingest_film, target, mine, run))
+    return {"run_id": run.run_id, "film": name}
+
+
+def _ingest_film(source: Path, workspace: str, run) -> None:
+    from agents.vision import analyse_clip
+    from google import genai
+
+    ch = connect()
+    gclient = genai.Client()
+
+    clips = _split_into_shots(source, run)
+    if not clips:
+        run.publish("orchestrator", "error", "No shots found in that file")
+        run.finish()
+        return
+
+    analyses: dict[str, dict] = {}
+    for i, clip in enumerate(clips, start=1):
+        run.publish("vision", "working",
+                    f"Watching shot {i} of {len(clips)}")
+        try:
+            analyses[clip.stem] = analyse_clip(gclient, {
+                "clip_name": clip.stem, "camera_roll": clip.stem.split("_")[0],
+                "duration_s": _probe_duration(clip), "start_s": 0.0,
+                "path": str(clip),
+            })
+        except Exception as exc:
+            run.publish("vision", "error", f"{clip.stem}: {type(exc).__name__}")
+
+    run.publish("script", "working", "Sorting the shots into scenes")
+    placed = _place_by_location(ch, run, workspace, clips, analyses)
+
+    by_scene: dict[str, list[Path]] = {}
+    for clip in clips:
+        scene_id = placed.get(clip.stem)
+        if scene_id:
+            by_scene.setdefault(scene_id, []).append(clip)
+
+    for scene_id, group in by_scene.items():
+        _ingest(group, scene_id, "", run, finish=False,
+                precomputed=analyses)
+
+    run.publish("orchestrator", "done",
+                f"{len(clips)} shots across {len(by_scene)} scenes")
     run.finish()
 
 

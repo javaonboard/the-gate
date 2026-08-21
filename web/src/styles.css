@@ -682,3 +682,24 @@ button.primary:disabled { opacity: 0.45; cursor: default; }
 .problem .body b { font-size: 13.5px; font-weight: 500; }
 .problem .body small { font-size: 11.5px; color: var(--faint); }
 .problem .which { font-size: 11.5px; color: var(--faint); }
+
+/* --- a whole film at once ------------------------------------------------- */
+
+.filmdrop {
+  margin-top: 8px;
+  padding: 10px 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--faint);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.filmdrop:hover, .filmdrop[data-over="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-wash);
+}

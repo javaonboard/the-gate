@@ -3,6 +3,7 @@ import type { GateCall } from "../api";
 import { clock, pct, usd } from "../api";
 import { CastMatrix } from "../components/CastMatrix";
 import { DropZone } from "../components/DropZone";
+import { FilmDrop } from "../components/FilmDrop";
 import { Problems } from "../components/Problems";
 import { SceneBar, type Scene } from "../components/SceneBar";
 
@@ -73,6 +74,13 @@ export function Today({ call, scene, onScene, onIngested, onChanged }: {
         setupId=""
         sceneName={scene ? `scene ${scene.number} · ${scene.place}` : ""}
         onIngested={(id) => {
+          setReloadKey((n) => n + 1);
+          onIngested(id);
+        }}
+      />
+
+      <FilmDrop
+        onStarted={(id) => {
           setReloadKey((n) => n + 1);
           onIngested(id);
         }}
