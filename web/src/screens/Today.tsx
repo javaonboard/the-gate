@@ -3,6 +3,7 @@ import type { GateCall } from "../api";
 import { clock, pct, usd } from "../api";
 import { CastMatrix } from "../components/CastMatrix";
 import { DropZone } from "../components/DropZone";
+import { Problems } from "../components/Problems";
 import { SceneBar, type Scene } from "../components/SceneBar";
 
 function oddsColour(p: number) {
@@ -121,6 +122,8 @@ export function Today({ call, scene, onScene, onIngested, onChanged }: {
       <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey} />
 
       {/* and the breakdown of the one that's open */}
+      {sceneId && <Problems sceneId={sceneId} reloadKey={reloadKey} />}
+
       {sceneId && (
         <CastMatrix
           sceneId={sceneId}

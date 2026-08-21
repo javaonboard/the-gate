@@ -644,3 +644,41 @@ button.primary:disabled { opacity: 0.45; cursor: default; }
   from { opacity: 0; transform: translateY(-3px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* --- problems in the footage --------------------------------------------- */
+
+.problems {
+  margin-top: 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.problem {
+  display: grid;
+  grid-template-columns: 78px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.problem:last-child { border-bottom: 0; }
+
+.problem .sev {
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-align: center;
+}
+
+.problem[data-severity="blocking"] .sev { color: var(--nogo); background: var(--nogo-wash); }
+.problem[data-severity="warning"] .sev { color: var(--warn); background: var(--warn-wash); }
+
+.problem .body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.problem .body b { font-size: 13.5px; font-weight: 500; }
+.problem .body small { font-size: 11.5px; color: var(--faint); }
+.problem .which { font-size: 11.5px; color: var(--faint); }

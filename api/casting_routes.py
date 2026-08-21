@@ -263,6 +263,27 @@ def merge(character_id: str, other_id: str,
 
 # --- coverage, per person ---------------------------------------------------
 
+@router.get("/api/scenes/{scene_id}/problems")
+def problems(scene_id: str, request: Request, response: Response):
+    """What QC found — worst first."""
+    ch = client()
+    scene_id = ws.scene_for(ch, ws.workspace_id(request, response), scene_id)
+    rows = ch.query(
+        f"""
+        SELECT take_id, category, severity, what, where_in_frame, at_seconds
+        FROM {DB}.take_problems WHERE scene_id = %(s)s
+        ORDER BY multiIf(severity = 'blocking', 0,
+                         severity = 'warning', 1, 2), take_id
+        """,
+        parameters={"s": scene_id},
+    ).result_rows
+    return [
+        {"take_id": r[0], "category": r[1], "severity": r[2], "what": r[3],
+         "where": r[4], "at_seconds": r[5]}
+        for r in rows
+    ]
+
+
 @router.get("/api/scenes/{scene_id}/matrix")
 def coverage_matrix(scene_id: str, request: Request, response: Response):
     ch = client()
@@ -410,6 +431,18 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
     production_id = row[0][0] if row else "prod_now"
     shoot_day = date.today()
 
+    # QC needs to know what world the scene is set in before it can say what
+    # does not belong in it.
+    period, setting = "", ""
+    context = ch.query(
+        f"SELECT synopsis, replaceAll(location_id, '_', ' ') "
+        f"FROM {DB}.scenes WHERE scene_id = %(s)s LIMIT 1",
+        parameters={"s": scene_id},
+    ).result_rows
+    if context:
+        setting = context[0][1]
+        period = context[0][0][:120]
+
     for path in paths:
         take_id = path.stem
         duration = _probe_duration(path)
@@ -476,6 +509,23 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run) -> None:
             "eyeline_target", "focus_score", "exposure_score",
             "continuity_flags", "vfx_clean_plate", "vfx_chart", "vfx_grey_ball",
             "vfx_markers", "vfx_lens_grid", "model_id", "analysed_at"])
+
+        run.publish("qc", "working", f"Checking {take_id} for problems")
+        try:
+            from agents import qc
+            verdict = qc.check_take(gclient, path, period, setting)
+            qc.store(ch, production_id, scene_id, setup_id, take_id, verdict)
+            blocking = [p for p in verdict.get("problems", [])
+                        if p["severity"] == "blocking"]
+            run.publish(
+                "qc", "tool_result",
+                (f"{take_id}: {blocking[0]['what'][:70]}" if blocking
+                 else f"{take_id}: clean"),
+                {"usable": verdict.get("usable", True),
+                 "problems": len(verdict.get("problems", []))},
+            )
+        except Exception as exc:
+            run.publish("qc", "error", f"{take_id}: {type(exc).__name__}")
 
         run.publish("casting", "working", f"Looking for faces in {take_id}")
         known = ch.query(

@@ -127,6 +127,19 @@ def matrix(client, scene_id: str) -> list[CharacterRow]:
         ).result_rows
     }
 
+    # A take with a blocking problem is not coverage. The footage exists; it
+    # cannot be used, which is a different thing, and the difference is exactly
+    # what stops a scene being wrapped short.
+    blocked = {
+        r[0] for r in client.query(
+            f"""
+            SELECT DISTINCT take_id FROM {DB}.take_problems
+            WHERE scene_id = %(s)s AND severity = 'blocking'
+            """,
+            parameters={"s": scene_id},
+        ).result_rows
+    }
+
     appearances = client.query(
         f"""
         SELECT character_id, groupArray(take_id)
@@ -164,7 +177,7 @@ def matrix(client, scene_id: str) -> list[CharacterRow]:
 
         for take_id in by_character.get(character_id, []):
             take = takes.get(take_id)
-            if not take:
+            if not take or take_id in blocked:
                 continue
             band = _band_of(take["size"])
             if band is None:

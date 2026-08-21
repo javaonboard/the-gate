@@ -30,6 +30,11 @@ AGENTS: dict[str, dict[str, str]] = {
         "role": "Casting",
         "does": "Finds who is in each take and keeps track of them",
     },
+    "qc": {
+        "name": "QC",
+        "role": "Quality Control",
+        "does": "Looks for what would stop a take being used",
+    },
     "historian": {
         "name": "The Book",
         "role": "Production Records",
