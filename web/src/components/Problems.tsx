@@ -17,14 +17,27 @@ type Problem = {
 };
 
 const CATEGORY: Record<string, string> = {
+  // technical
   crew_or_equipment: "crew in shot",
-  anachronism: "shouldn't be there",
+  boom_shadow: "mic shadow",
+  reflection: "camera reflected",
   focus: "focus",
   exposure: "exposure",
-  framing: "framing",
-  continuity: "continuity",
-  performance: "performance",
   artefact: "artefact",
+  framing: "framing",
+  // the world
+  anachronism: "didn't exist yet",
+  wrong_place: "doesn't belong here",
+  modern_branding: "modern branding",
+  // won't cut
+  continuity: "won't cut",
+  screen_direction: "facing the wrong way",
+  prop_position: "prop moved",
+  wardrobe: "wardrobe changed",
+  physical_state: "state changed",
+  hair_makeup: "hair or makeup",
+  light: "light moved",
+  performance: "performance",
 };
 
 export function Problems({ sceneId, reloadKey }: {

@@ -29,6 +29,13 @@ const ICONS: Record<string, ReactNode> = {
             strokeLinecap="round" />
     </>
   ),
+  world: (
+    <>
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7" fill="none" />
+      <path d="M3.5 12h17M12 3.5c2.2 2.3 3.4 5.3 3.4 8.5S14.2 18.2 12 20.5c-2.2-2.3-3.4-5.3-3.4-8.5S9.8 5.8 12 3.5z"
+            stroke="currentColor" strokeWidth="1.5" fill="none" />
+    </>
+  ),
   grab: (
     <path d="M12 3.5v12M7.5 11.5 12 16l4.5-4.5M4.5 19.5h15"
           stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"

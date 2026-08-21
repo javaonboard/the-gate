@@ -42,6 +42,117 @@ def client():
 
 # --- the scenes -------------------------------------------------------------
 
+class World(BaseModel):
+    period: str = ""
+    setting: str = ""
+    notes: str = ""
+
+
+@router.get("/api/world")
+def get_world(request: Request, response: Response):
+    """What world this production is set in.
+
+    Everything QC calls an anachronism is judged against this. A coffee cup is
+    only wrong because the scene is medieval, so somebody has to say so.
+    """
+    from agents.qc import world_of
+
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    period, setting, notes = world_of(ch, ws.read_from(ch, mine))
+    return {"period": period, "setting": setting, "notes": notes}
+
+
+@router.put("/api/world")
+def set_world(body: World, request: Request, response: Response):
+    """Change the world. Re-running QC then judges against the new one."""
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+    ch.insert("production_world", [[
+        mine, body.period.strip()[:200], body.setting.strip()[:200],
+        body.notes.strip()[:400], datetime.now(),
+    ]], column_names=["production_id", "period", "setting", "notes",
+                      "updated_at"])
+    return {"ok": True, "period": body.period, "setting": body.setting}
+
+
+@router.post("/api/scenes/{scene_id}/recheck")
+async def recheck(scene_id: str, request: Request, response: Response):
+    """Look at this scene's footage again against the world as it stands now."""
+    import asyncio
+
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+    scene_id = ws.scene_for(ch, mine, scene_id)
+
+    run = bus.start(scene_id)
+    run.publish("qc", "started", "Looking at the footage again")
+    asyncio.create_task(asyncio.to_thread(_recheck_scene, scene_id, mine, run))
+    return {"run_id": run.run_id}
+
+
+def _recheck_scene(scene_id: str, production_id: str, run) -> None:
+    from agents import qc
+    from google import genai
+
+    ch = connect()
+    gclient = genai.Client()
+    period, setting, notes = qc.world_of(ch, production_id)
+
+    ch.command(
+        f"ALTER TABLE {DB}.take_problems DELETE WHERE scene_id = %(s)s",
+        parameters={"s": scene_id},
+    )
+
+    takes = ch.query(
+        f"SELECT setup_id, take_id FROM {DB}.takes WHERE scene_id = %(s)s "
+        f"ORDER BY setup_id, take_no",
+        parameters={"s": scene_id},
+    ).result_rows
+
+    flagged = 0
+    for setup_id, take_id in takes:
+        path = CLIPS_DIR / f"{take_id}.mp4"
+        if not path.exists():
+            continue
+        run.publish("qc", "working", f"Checking {take_id}")
+        try:
+            verdict = qc.check_take(gclient, path, period, setting, notes)
+        except Exception as exc:
+            run.publish("qc", "error", f"{take_id}: {type(exc).__name__}")
+            continue
+
+        qc.store(ch, production_id, scene_id, setup_id, take_id, verdict)
+        blocking = [p for p in verdict.get("problems", [])
+                    if p["severity"] == "blocking"]
+        if blocking:
+            flagged += 1
+            run.publish("qc", "tool_result",
+                        f"{take_id}: {blocking[0]['what'][:70]}")
+
+    # everything above judges takes one at a time; this is the only check that
+    # needs them side by side
+    run.publish("continuity", "working", "Checking the angles cut together")
+    try:
+        from agents import continuity
+        verdict = continuity.compare_scene(gclient, ch, scene_id, CLIPS_DIR)
+        if verdict:
+            continuity.store(ch, production_id, scene_id, verdict)
+            run.publish(
+                "continuity", "tool_result",
+                verdict["one_line"][:110] if not verdict["will_cut"]
+                else "The angles cut together",
+            )
+    except Exception as exc:
+        run.publish("continuity", "error", type(exc).__name__)
+
+    run.publish("orchestrator", "done",
+                f"{flagged} of {len(takes)} takes can't be used")
+    run.finish()
+
+
 @router.delete("/api/workspace")
 def clear_workspace(request: Request, response: Response):
     """Throw everything away and start from an empty day.
@@ -575,6 +686,20 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run,
         run.publish("casting", "tool_result",
                     f"{len(links)} face(s), {fresh} new"
                     if links else "no faces found")
+
+    run.publish("continuity", "working", "Checking the angles cut together")
+    try:
+        from agents import continuity
+        verdict = continuity.compare_scene(gclient, ch, scene_id, CLIPS_DIR)
+        if verdict:
+            continuity.store(ch, production_id, scene_id, verdict)
+            run.publish(
+                "continuity", "tool_result",
+                verdict["one_line"][:110] if not verdict["will_cut"]
+                else "The angles cut together",
+            )
+    except Exception as exc:
+        run.publish("continuity", "error", type(exc).__name__)
 
     if finish:
         run.publish("orchestrator", "done", f"{len(paths)} clip(s) taken in")

@@ -6,6 +6,7 @@ import { Intake } from "../components/Intake";
 import { Problems } from "../components/Problems";
 import { SceneBar, type Scene } from "../components/SceneBar";
 import { SectionTitle } from "../components/SectionTitle";
+import { WorldPanel } from "../components/WorldPanel";
 
 /** Several missing shots of one person read as one job, not three. */
 function groupByPerson(options: GateCall["options"]) {
@@ -138,6 +139,16 @@ export function Today({ call, scene, onScene, onIngested, onChanged }: {
       <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey} />
 
       {/* and the breakdown of the one that's open */}
+      {sceneId && (
+        <WorldPanel
+          sceneId={sceneId}
+          onRechecked={(id) => {
+            setReloadKey((n) => n + 1);
+            onIngested(id);
+          }}
+        />
+      )}
+
       {sceneId && <Problems sceneId={sceneId} reloadKey={reloadKey} />}
 
       {sceneId && (
