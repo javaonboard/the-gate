@@ -703,3 +703,144 @@ button.primary:disabled { opacity: 0.45; cursor: default; }
   color: var(--accent);
   background: var(--accent-wash);
 }
+
+/* --- section headings ---------------------------------------------------- */
+
+.sect {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 4px;
+}
+
+.sect svg { width: 17px; height: 17px; color: var(--accent); flex: none; }
+
+.sect h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.sect-aside { font-size: 12.5px; color: var(--muted); }
+
+/* --- why, on demand ------------------------------------------------------ */
+
+.why { margin: 0 0 22px; }
+
+.why summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-wash);
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+.why summary::-webkit-details-marker { display: none; }
+.why summary::after { content: "›"; transform: rotate(90deg); font-size: 14px; }
+.why[open] summary::after { transform: rotate(-90deg); }
+
+.why p {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 70ch;
+  color: var(--muted);
+}
+
+/* --- footage in, three ways ---------------------------------------------- */
+
+.intake {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 11px 0 4px;
+}
+
+.intake-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 15px 16px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.intake-card svg { width: 22px; height: 22px; color: var(--accent); }
+.intake-card b { font-size: 14px; font-weight: 600; }
+.intake-card small { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+.intake-card:hover,
+.intake-card[data-over="true"] {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  box-shadow: var(--shadow);
+}
+
+.intake-card[data-over="true"] { border-style: solid; }
+.intake-card[data-busy="true"] { border-style: solid; border-color: var(--accent); }
+
+.intake-card.danger { border-style: solid; border-color: var(--line-soft); }
+.intake-card.danger svg { color: var(--faint); }
+.intake-card.danger:hover {
+  border-color: var(--nogo);
+  background: var(--nogo-wash);
+  box-shadow: none;
+}
+.intake-card.danger:hover svg, .intake-card.danger:hover b { color: var(--nogo); }
+
+.intake-note {
+  grid-column: 1 / -1;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-top: 2px;
+}
+
+/* --- worth grabbing, one box per person ---------------------------------- */
+
+.grabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.grab {
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--go);
+  border-radius: var(--radius);
+  padding: 13px 15px;
+  background: var(--panel);
+}
+
+.grab-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.grab-head b { font-size: 14.5px; font-weight: 650; }
+.grab-head span { font-size: 12.5px; font-weight: 600; color: var(--go); }
+
+.grab ul { list-style: none; margin: 9px 0 7px; padding: 0; }
+
+.grab li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+
+.grab-shot { font-weight: 500; }
+.grab-cost { color: var(--faint); }
+.grab small { font-size: 11.5px; color: var(--faint); }

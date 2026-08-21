@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SectionTitle } from "./SectionTitle";
 
 /** What QC found.
  *
@@ -46,14 +47,16 @@ export function Problems({ sceneId, reloadKey }: {
 
   return (
     <section style={{ marginTop: 26 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <h3 className="section-title">Problems in the footage</h3>
-        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-          {blocking > 0
+      <SectionTitle
+        icon="problems"
+        aside={
+          blocking > 0
             ? `${blocking} take${blocking > 1 ? "s" : ""} can't be used`
-            : `${shown.length} worth a look`}
-        </span>
-      </div>
+            : `${shown.length} worth a look`
+        }
+      >
+        Problems in the footage
+      </SectionTitle>
 
       <div className="problems">
         {shown.map((p, i) => (

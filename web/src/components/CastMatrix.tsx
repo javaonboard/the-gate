@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { usd } from "../api";
+import { SectionTitle } from "./SectionTitle";
 
 /** What we have on each person, and what we still need.
  *
@@ -105,17 +106,19 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
 
   return (
     <section style={{ marginTop: 28 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <h3 className="section-title">
-          Who's in {sceneName || "this scene"}
-        </h3>
-        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-          {summary.have} of {summary.required} shots
-          {summary.exposure_usd > 0 && (
-            <> · {usd(summary.exposure_usd)} to get the rest later</>
-          )}
-        </span>
-      </div>
+      <SectionTitle
+        icon="people"
+        aside={
+          <>
+            {summary.have} of {summary.required} shots
+            {summary.exposure_usd > 0 && (
+              <> · {usd(summary.exposure_usd)} to get the rest later</>
+            )}
+          </>
+        }
+      >
+        Who's in {sceneName || "this scene"}
+      </SectionTitle>
 
       <div className="matrix">
         <div className="matrix-head">

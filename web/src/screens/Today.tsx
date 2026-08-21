@@ -2,10 +2,23 @@ import { useState } from "react";
 import type { GateCall } from "../api";
 import { clock, pct, usd } from "../api";
 import { CastMatrix } from "../components/CastMatrix";
-import { DropZone } from "../components/DropZone";
-import { FilmDrop } from "../components/FilmDrop";
+import { Intake } from "../components/Intake";
 import { Problems } from "../components/Problems";
 import { SceneBar, type Scene } from "../components/SceneBar";
+import { SectionTitle } from "../components/SectionTitle";
+
+/** Several missing shots of one person read as one job, not three. */
+function groupByPerson(options: GateCall["options"]) {
+  const by = new Map<string, { person: string; saving: number; shots: GateCall["options"] }>();
+  for (const o of options) {
+    const person = o.subject && o.subject !== "-" ? o.subject : "the scene";
+    const found = by.get(person) ?? { person, saving: 0, shots: [] };
+    found.saving += o.saving_usd;
+    found.shots.push(o);
+    by.set(person, found);
+  }
+  return [...by.values()].sort((a, b) => b.saving - a.saving);
+}
 
 function oddsColour(p: number) {
   if (p >= 0.7) return "var(--go)";
@@ -66,67 +79,62 @@ export function Today({ call, scene, onScene, onIngested, onChanged }: {
         )}
       </div>
 
-      {call && <p className="spoken">{call.spoken || call.summary}</p>}
+      {call && (
+        <details className="why">
+          <summary>Why</summary>
+          <p>{call.spoken || call.summary}</p>
+        </details>
+      )}
 
-      {/* footage in */}
-      <DropZone
+      {/* footage in, or thrown away */}
+      <SectionTitle icon="footage">Footage</SectionTitle>
+      <Intake
         sceneId={sceneId}
-        setupId=""
         sceneName={scene ? `scene ${scene.number} · ${scene.place}` : ""}
-        onIngested={(id) => {
-          setReloadKey((n) => n + 1);
-          onIngested(id);
-        }}
-      />
-
-      <FilmDrop
         onStarted={(id) => {
           setReloadKey((n) => n + 1);
           onIngested(id);
         }}
+        onCleared={() => {
+          setReloadKey((n) => n + 1);
+          onChanged();
+        }}
       />
 
       {call && call.options.filter((o) => o.worth_it).length > 0 && (
-        <section style={{ marginTop: 26 }}>
-          <h3 className="section-title">Worth grabbing before we move</h3>
-          {call.options
-            .filter((o) => o.worth_it)
-            .map((o, i) => (
-              <div className="option" key={i} data-worth={o.worth_it}>
-                <div className="head">
-                  <b>
-                    {o.shot_type} {o.subject !== "-" ? o.subject : ""}
-                  </b>
-                  <span
-                    style={{ color: "var(--go)", fontFamily: "var(--mono)" }}
-                  >
-                    saves {usd(o.saving_usd)}
-                  </span>
+        <section style={{ marginTop: 28 }}>
+          <SectionTitle icon="grab">Worth grabbing before we move</SectionTitle>
+          <div className="grabs">
+            {groupByPerson(call.options.filter((o) => o.worth_it)).map((g) => (
+              <div className="grab" key={g.person}>
+                <div className="grab-head">
+                  <b>{g.person}</b>
+                  <span>saves {usd(g.saving)}</span>
                 </div>
-                <div className="prices">
-                  <div>
-                    <span>shoot now</span>
-                    {usd(o.shoot_now_usd)}
-                  </div>
-                  <div>
-                    <span>pick up later</span>
-                    {usd(o.recover_later_usd)}
-                  </div>
-                  <div>
-                    <span>odds after</span>
-                    {pct(o.p_make_day_after)}
-                  </div>
-                </div>
-                <div className="verdict-line">{o.verdict}</div>
+                <ul>
+                  {g.shots.map((o, i) => (
+                    <li key={i}>
+                      <span className="grab-shot">{o.shot_type}</span>
+                      <span className="grab-cost">
+                        {usd(o.shoot_now_usd)} now · {usd(o.recover_later_usd)} later
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <small>
+                  odds drop to {pct(Math.min(...g.shots.map((s) => s.p_make_day_after)))} if
+                  you shoot {g.shots.length > 1 ? "them all" : "it"}
+                </small>
               </div>
             ))}
+          </div>
         </section>
       )}
 
       {/* pick a scene */}
-      <h3 className="section-title" style={{ marginTop: 26 }}>
-        Scenes today
-      </h3>
+      <div style={{ marginTop: 28 }}>
+        <SectionTitle icon="scenes">Scenes today</SectionTitle>
+      </div>
       <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey} />
 
       {/* and the breakdown of the one that's open */}

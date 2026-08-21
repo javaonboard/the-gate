@@ -42,6 +42,39 @@ def client():
 
 # --- the scenes -------------------------------------------------------------
 
+@router.delete("/api/workspace")
+def clear_workspace(request: Request, response: Response):
+    """Throw everything away and start from an empty day.
+
+    Only touches this visitor's copy. The seeded demo is left alone, so the
+    next person still arrives at something.
+    """
+    ch = client()
+    mine = ws.workspace_id(request, response)
+
+    for table in ("scenes", "setups", "takes", "take_analysis",
+                  "take_characters", "characters", "shoot_days", "crew_hours",
+                  "take_problems"):
+        ch.command(
+            f"ALTER TABLE {DB}.{table} DELETE WHERE production_id = %(p)s",
+            parameters={"p": mine},
+        )
+    ch.command(
+        f"ALTER TABLE {DB}.character_requirements DELETE "
+        f"WHERE startsWith(scene_id, %(p)s)",
+        parameters={"p": mine},
+    )
+
+    # an empty production, so nothing falls back to the shared demo
+    ch.insert("scenes", [[
+        mine, f"{mine}_sc000", 0.0, 0, "EXT", "DAY", "dialogue",
+        "nothing_yet", [], "",
+    ]], column_names=["production_id", "scene_id", "script_page",
+                      "page_eighths", "int_ext", "day_night", "scene_type",
+                      "location_id", "characters", "synopsis"])
+    return {"cleared": mine}
+
+
 @router.get("/api/scenes")
 def scenes(request: Request, response: Response):
     """Every scene in the day's work.
@@ -432,17 +465,17 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run,
     production_id = row[0][0] if row else "prod_now"
     shoot_day = date.today()
 
-    # QC needs to know what world the scene is set in before it can say what
-    # does not belong in it.
-    period, setting = "", ""
-    context = ch.query(
-        f"SELECT synopsis, replaceAll(location_id, '_', ' ') "
-        f"FROM {DB}.scenes WHERE scene_id = %(s)s LIMIT 1",
-        parameters={"s": scene_id},
-    ).result_rows
-    if context:
-        setting = context[0][1]
-        period = context[0][0][:120]
+    # QC cannot call anything an anachronism without knowing the world the
+    # production is set in.
+    from agents.qc import world_of
+    period, setting, world_notes = world_of(ch, production_id)
+    if not setting:
+        here = ch.query(
+            f"SELECT replaceAll(location_id, '_', ' ') FROM {DB}.scenes "
+            f"WHERE scene_id = %(s)s LIMIT 1",
+            parameters={"s": scene_id},
+        ).result_rows
+        setting = here[0][0] if here else ""
 
     for path in paths:
         take_id = path.stem
@@ -517,7 +550,7 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run,
         run.publish("qc", "working", f"Checking {take_id} for problems")
         try:
             from agents import qc
-            verdict = qc.check_take(gclient, path, period, setting)
+            verdict = qc.check_take(gclient, path, period, setting, world_notes)
             qc.store(ch, production_id, scene_id, setup_id, take_id, verdict)
             blocking = [p for p in verdict.get("problems", [])
                         if p["severity"] == "blocking"]

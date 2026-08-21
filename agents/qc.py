@@ -45,16 +45,28 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 DB = os.environ.get("CLICKHOUSE_DATABASE", "the_gate")
 MODEL = os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.7-flash")
 
-# What we look for, in the language a set uses.
+# What we look for. Grouped the way a real set divides responsibility: camera
+# and sound own the technical faults, production design owns whether the world
+# is right, and the script supervisor owns whether it will cut together.
 CATEGORIES = {
+    # technical — camera and sound
     "crew_or_equipment": "someone or something from the crew is in shot",
-    "anachronism": "an object that does not belong in this world or period",
+    "boom_shadow": "a microphone shadow on a wall or a face",
+    "reflection": "the camera or crew reflected in glass or a mirror",
     "focus": "the subject is not sharp",
     "exposure": "too bright or too dark to use",
+    "artefact": "flicker, rolling shutter, banding, a dead pixel",
     "framing": "badly composed, cut off, or obstructed",
+
+    # the world — production design
+    "anachronism": "something that did not exist in this period",
+    "wrong_place": "something that does not belong in this setting",
+    "modern_branding": "present-day logos, packaging or signage",
+
+    # will it cut — script supervisor
     "continuity": "a detail that will not match the other takes",
+    "screen_direction": "facing the wrong way to cut with the others",
     "performance": "a fluffed line, a look to camera, a broken moment",
-    "artefact": "flicker, rolling shutter, compression, a dead pixel",
 }
 
 SEVERITIES = ["blocking", "warning", "note"]
@@ -100,52 +112,76 @@ QC_SCHEMA = {
 }
 
 
-def build_prompt(period: str, setting: str) -> str:
-    return f"""You are checking a take before the camera moves on. Look for
-anything that would stop an editor using it.
+def build_prompt(period: str, setting: str, notes: str = "") -> str:
+    extra = f"Also: {notes}" if notes else ""
+    return f"""You are checking a take before the camera moves on. Find anything
+that would stop an editor using it.
 
-The scene is set in: {setting or "a contemporary setting"}.
-Period: {period or "present day"}.
+THE WORLD THIS IS SET IN
+Period:  {period or "present day"}
+Setting: {setting or "a contemporary setting"}
+{extra}
 
-Look for, in this order of importance:
+Anything visible that could not exist in that world is a problem, however small
+and however far into the background. This is the most valuable thing you can
+find: it costs nothing to fix while the camera is still up, and cannot be fixed
+once the set is struck.
 
-1. Anyone or anything belonging to the crew — a person, a light stand, a boom,
-   a cable, tape on the floor, a reflection of the camera in glass or a mirror.
+Work through three passes.
 
-2. Objects that do not belong in this world. A modern cup, a plastic bottle, a
-   wristwatch in a period scene, a car in the background of a medieval street,
-   a mobile phone where there should not be one. This is the most valuable thing
-   you can find and the easiest to miss.
+1. IS ANYTHING FROM THE CREW VISIBLE?
+   A person, a light stand, a boom, a cable, sandbags, tape marks on the floor,
+   a shadow cast by a microphone, the camera or an operator reflected in glass,
+   a mirror, a window, a car door, someone's glasses.
 
-3. Whether the intended subject is genuinely sharp, and whether the exposure is
-   usable.
+2. DOES EVERY OBJECT BELONG IN THIS WORLD?
+   Go across the frame object by object, including the background and the very
+   edges. A disposable coffee cup, a plastic bottle, a wristwatch, trainers, a
+   zip, a phone, a wheelie bin, a parked car, road markings, an aerial, a
+   satellite dish, a modern shopfront, a printed logo, a light switch, a power
+   socket. Ask of each one: could this exist in this period and this place?
+   Say exactly what it is and exactly where, so someone can walk over and move
+   it.
 
-4. Framing — anyone cut off badly, anything blocking the subject, headroom
-   plainly wrong.
-
-5. Anything an editor would find awkward: a look to camera, a visible mistake,
-   a flicker or artefact.
+3. IS IT TECHNICALLY USABLE?
+   Is the intended subject genuinely sharp. Is the exposure recoverable. Any
+   flicker, banding or rolling shutter. Is anyone cut off badly or obstructed.
+   Is anyone looking down the lens.
 
 Rules:
-- Mark something blocking only if the take genuinely could not be used. A crew
-  member in shot is blocking. A slightly soft frame is a warning.
-- Say where it is, so someone can look at it.
-- Do not invent problems. A clean take should come back with an empty list and
-  usable = true. Most takes are clean.
-- Judge what you can see, not what you imagine.
+- blocking means the take genuinely cannot be used: a crew member in shot, an
+  object that could not exist, the subject out of focus.
+- warning means usable, but worth another take if there is time.
+- Do not invent problems. Most takes are clean, and a clean take must come back
+  with an empty list and usable = true. A false alarm costs a take nobody needed.
+- Judge only what you can actually see.
 
-Be specific. "A white paper cup on the table, right of frame" is useful.
-"Possible continuity issue" is not."""
+Be specific. "A white paper cup on the table, left of the actress" is useful.
+"Possible continuity issue" is worthless."""
+
+
+def world_of(ch, production_id: str) -> tuple[str, str, str]:
+    """The period and setting this production is meant to be in.
+
+    Without it there is no such thing as an anachronism — a coffee cup is only
+    wrong because the scene is medieval.
+    """
+    rows = ch.query(
+        f"SELECT period, setting, notes FROM {DB}.production_world FINAL "
+        f"WHERE production_id = %(p)s",
+        parameters={"p": production_id},
+    ).result_rows
+    return tuple(rows[0]) if rows else ("", "", "")
 
 
 def check_take(client: genai.Client, path: Path, period: str = "",
-               setting: str = "") -> dict[str, Any]:
+               setting: str = "", notes: str = "") -> dict[str, Any]:
     """Watch one take and report what would stop it being used."""
     response = client.models.generate_content(
         model=MODEL,
         contents=[
             types.Part.from_bytes(data=path.read_bytes(), mime_type="video/mp4"),
-            build_prompt(period, setting),
+            build_prompt(period, setting, notes),
         ],
         config=types.GenerateContentConfig(
             temperature=0,
