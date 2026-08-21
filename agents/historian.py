@@ -214,34 +214,65 @@ They are read-only and capped. Prefer them over clever SQL — they already
 carry the definitions everyone else in the system uses."""
 
 
-def build_agent(callbacks: dict | None = None, with_mcp: bool = True):
+# ClickHouse Cloud hosts a managed MCP server. It is the richer of the two —
+# thirteen read-only tools covering queries, schemas, services and billing —
+# but it authenticates by OAuth 2.0 with a browser sign-in and offers no
+# headless option, so it cannot be used by an agent running on Cloud Run.
+#
+# The self-hosted server takes a bearer token and runs anywhere. Both are the
+# official ClickHouse MCP server; they differ only in who operates them.
+MANAGED_MCP_URL = "https://mcp.clickhouse.cloud/mcp"
+
+
+def mcp_toolset(mode: str | None = None):
+    """The ClickHouse MCP connection, managed or self-hosted.
+
+    mode: "managed" for ClickHouse Cloud's hosted server (OAuth, interactive —
+    use locally and for the demo), "local" for the self-hosted server (bearer
+    token, works unattended — use when deployed). Defaults to CLICKHOUSE_MCP_MODE.
+    """
+    from google.adk.tools.mcp_tool import McpToolset
+    from google.adk.tools.mcp_tool.mcp_session_manager import (
+        StreamableHTTPConnectionParams,
+    )
+
+    mode = mode or os.environ.get("CLICKHOUSE_MCP_MODE", "local")
+
+    if mode == "managed":
+        return McpToolset(
+            connection_params=StreamableHTTPConnectionParams(
+                url=MANAGED_MCP_URL,
+            )
+        )
+
+    url = os.environ.get("CLICKHOUSE_MCP_URL")
+    if not url:
+        return None
+    return McpToolset(
+        connection_params=StreamableHTTPConnectionParams(
+            url=url,
+            headers={
+                "Authorization": f"Bearer {os.environ['CLICKHOUSE_MCP_AUTH_TOKEN']}"
+            },
+        )
+    )
+
+
+def build_agent(callbacks: dict | None = None, with_mcp: bool = True,
+                mcp_mode: str | None = None):
     """The Book as an ADK agent.
 
     with_mcp adds the live ClickHouse MCP connection so the agent can write its
-    own SQL for questions the typed tools do not answer. It needs the MCP server
-    running:  $env:CLICKHOUSE_MCP_SERVER_TRANSPORT="http"; mcp-clickhouse
+    own SQL for questions the typed tools do not answer.
     """
     from google.adk.agents import Agent
 
     tools = list(TOOLS)
 
-    if with_mcp and os.environ.get("CLICKHOUSE_MCP_URL"):
-        from google.adk.tools.mcp_tool import McpToolset
-        from google.adk.tools.mcp_tool.mcp_session_manager import (
-            StreamableHTTPConnectionParams,
-        )
-
-        tools.append(
-            McpToolset(
-                connection_params=StreamableHTTPConnectionParams(
-                    url=os.environ["CLICKHOUSE_MCP_URL"],
-                    headers={
-                        "Authorization":
-                            f"Bearer {os.environ['CLICKHOUSE_MCP_AUTH_TOKEN']}"
-                    },
-                )
-            )
-        )
+    if with_mcp:
+        toolset = mcp_toolset(mcp_mode)
+        if toolset is not None:
+            tools.append(toolset)
 
     return Agent(
         model=os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.7-flash"),
