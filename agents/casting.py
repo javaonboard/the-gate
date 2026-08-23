@@ -420,7 +420,10 @@ def cast_scene(scene_id: str, clips_dir: Path, run=None, reset: bool = False
     for take_id, setup_id, duration, _ in takes:
         video = clips_dir / f"{take_id}.mp4"
         if not video.exists():
-            continue
+            found = next((clips_dir.parent / "uploads").rglob(f"{take_id}.mp4"), None)
+            if found is None:
+                continue
+            video = found
         if run:
             run.publish("casting", "working", f"Looking at {take_id}")
 

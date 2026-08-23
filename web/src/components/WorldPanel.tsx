@@ -68,8 +68,8 @@ export function WorldPanel({ sceneId, onRechecked }: {
 
       {!open && (
         <p className="world-line">
-          {world.setting || "Nowhere in particular."} Anything that could not
-          exist there is flagged.
+          {world.setting || "Nowhere in particular."} Read from the footage —
+          anything that could not exist there is flagged.
         </p>
       )}
 

@@ -161,6 +161,70 @@ Be specific. "A white paper cup on the table, left of the actress" is useful.
 "Possible continuity issue" is worthless."""
 
 
+WORLD_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "period": {
+            "type": "string",
+            "description": "When this is set, e.g. '1300s medieval Europe', "
+                           "'1950s', 'near-future science fiction around 2040', "
+                           "'present day'.",
+        },
+        "setting": {
+            "type": "string",
+            "description": "Where, in a few words. 'a canal street in a "
+                           "European city', 'a spacecraft interior'.",
+        },
+        "notes": {
+            "type": "string",
+            "description": "One sentence on what would look out of place here.",
+        },
+        "confidence": {"type": "number"},
+    },
+    "required": ["period", "setting", "notes", "confidence"],
+}
+
+WORLD_PROMPT = """Look at these frames from one production and work out what
+world it is set in.
+
+Judge from what is actually visible: architecture, clothing, vehicles,
+technology, signage, lighting. A production designer chose all of it.
+
+Give:
+- the period, as specifically as the frames support
+- the setting, in a few words
+- one sentence on what would look out of place — the things a props or wardrobe
+  department would have to keep out of shot
+
+Be careful with science fiction: futuristic technology in a present-day street
+means near-future, not the far future. If the frames genuinely do not say, use
+"present day" and a low confidence."""
+
+
+def infer_world(client: genai.Client, frames: list[bytes]) -> dict[str, Any]:
+    """Work out the period and setting from the footage itself.
+
+    Nobody should have to type this in. The frames already say what world the
+    production is in — that is the production designer's whole job.
+    """
+    parts: list[Any] = [
+        types.Part.from_bytes(data=f, mime_type="image/png") for f in frames
+    ]
+    parts.append(types.Part.from_text(text=WORLD_PROMPT))
+
+    response = retry(
+        client.models.generate_content,
+        model=MODEL,
+        contents=parts,
+        config=types.GenerateContentConfig(
+            temperature=0,
+            response_mime_type="application/json",
+            response_schema=WORLD_SCHEMA,
+        ),
+    )
+    return json.loads(response.text)
+
+
 def world_of(ch, production_id: str) -> tuple[str, str, str]:
     """The period and setting this production is meant to be in.
 

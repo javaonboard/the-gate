@@ -27,14 +27,17 @@ function oddsColour(p: number) {
   return "var(--nogo)";
 }
 
-export function Today({ call, scene, onScene, onIngested, onChanged }: {
+export function Today({ call, scene, dataKey, onScene, onIngested, onChanged }: {
   call: GateCall | null;
   scene: Scene | null;
+  dataKey: number;
   onScene: (s: Scene) => void;
   onIngested: (runId: string) => void;
   onChanged: () => void;
 }) {
-  const [reloadKey, setReloadKey] = useState(0);
+  const [bumped, setBumped] = useState(0);
+  const reloadKey = bumped + dataKey;
+  const setReloadKey = (fn: (n: number) => number) => setBumped(fn);
   const sceneId = scene?.scene_id ?? "";
 
   return (

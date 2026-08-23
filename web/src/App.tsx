@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityLine } from "./components/ActivityLine";
+import { DayBar } from "./components/DayBar";
 import type { Scene } from "./components/SceneBar";
 import { Today } from "./screens/Today";
 import { useRun } from "./useRun";
@@ -12,6 +13,15 @@ export default function App() {
   const [useAgent, setUseAgent] = useState(true);
   const sceneId = scene?.scene_id ?? FIRST_SCENE;
   const { events, call, busy, error, start, follow } = useRun(sceneId);
+  const [dataKey, setDataKey] = useState(0);
+  const wasBusy = useRef(false);
+
+  // A run that finishes in the background has usually changed the scenes, the
+  // cast and the problems. Nothing on screen knows that unless it is told.
+  useEffect(() => {
+    if (wasBusy.current && !busy) setDataKey((n) => n + 1);
+    wasBusy.current = busy;
+  }, [busy]);
 
   useEffect(() => {
     void start(hoursIn, useAgent);
@@ -33,23 +43,7 @@ export default function App() {
         </div>
 
         <div className="right">
-          <div className="controls">
-            <span>
-              {shootClock.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-            <input
-              type="range"
-              min={7}
-              max={12}
-              step={0.5}
-              value={hoursIn}
-              onChange={(e) => setHoursIn(Number(e.target.value))}
-              title="How far into the shoot day"
-            />
-          </div>
+          <DayBar hoursIn={hoursIn} onHoursIn={setHoursIn} />
 
           <label
             className="toggle"
@@ -85,6 +79,7 @@ export default function App() {
         <Today
           call={call}
           scene={scene}
+          dataKey={dataKey}
           onScene={(s) => {
             setScene(s);
             void start(hoursIn, useAgent, s.scene_id);

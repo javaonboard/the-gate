@@ -917,3 +917,46 @@ button.linky {
   padding: 0;
   text-decoration: underline;
 }
+
+/* --- the shoot day ------------------------------------------------------- */
+
+.daybar { display: flex; align-items: center; gap: 10px; }
+
+.daybar .clock {
+  font-size: 13px;
+  font-weight: 650;
+  min-width: 46px;
+}
+
+.daybar input[type="range"] { width: 116px; accent-color: var(--accent); }
+
+.daybar-ends {
+  font-size: 11.5px;
+  color: var(--faint);
+  cursor: pointer;
+  border-bottom: 1px dotted var(--line);
+}
+
+.daybar-ends:hover { color: var(--accent); border-color: var(--accent); }
+
+.daybar.editing { gap: 10px; }
+
+.daybar.editing label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.daybar.editing input {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+}

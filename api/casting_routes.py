@@ -12,7 +12,7 @@ import os
 import shutil
 import subprocess
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Request, Response, UploadFile
@@ -27,8 +27,39 @@ from core.coverage import connect
 router = APIRouter()
 
 DB = os.environ.get("CLICKHOUSE_DATABASE", "the_gate")
-CLIPS_DIR = Path(__file__).resolve().parents[2] / "footage" / "clips"
+
+# Where footage lands. Locally this is a folder; deployed it is a bucket
+# prefix. Either way each upload gets its own directory, so two people
+# dropping "scene1.mp4" do not overwrite each other and a clip can always be
+# traced back to the upload it came from.
+FOOTAGE_ROOT = Path(os.environ.get(
+    "FOOTAGE_ROOT",
+    Path(__file__).resolve().parents[2] / "footage",
+))
+CLIPS_DIR = FOOTAGE_ROOT / "clips"
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def upload_dir(workspace: str, kind: str) -> Path:
+    """A fresh directory for one upload."""
+    stamp = uuid.uuid4().hex[:8]
+    target = FOOTAGE_ROOT / "uploads" / workspace / f"{kind}_{stamp}"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def clip_path(take_id: str) -> Path:
+    """Find a clip wherever it was uploaded to.
+
+    Older takes live directly in clips/; newer ones sit under the upload that
+    brought them in. Checking the flat folder first keeps the seeded demo fast.
+    """
+    direct = CLIPS_DIR / f"{take_id}.mp4"
+    if direct.exists():
+        return direct
+    for found in (FOOTAGE_ROOT / "uploads").rglob(f"{take_id}.mp4"):
+        return found
+    return direct
 
 _local_client = None
 
@@ -46,6 +77,73 @@ class World(BaseModel):
     period: str = ""
     setting: str = ""
     notes: str = ""
+
+
+@router.get("/api/day")
+def get_day(request: Request, response: Response):
+    """When the day starts and ends.
+
+    Taken from the shoot day on record rather than typed in — a production
+    already knows its call time. Editable, because plans change.
+    """
+    ch = client()
+    mine = ws.read_from(ch, ws.workspace_id(request, response))
+    rows = ch.query(
+        f"""
+        SELECT call_time, sunset, shoot_day
+        FROM {DB}.shoot_days WHERE production_id = %(p)s
+        ORDER BY shoot_day DESC LIMIT 1
+        """,
+        parameters={"p": mine},
+    ).result_rows
+
+    if rows:
+        call_time, sunset, day = rows[0]
+    else:
+        day = date.today()
+        call_time = datetime.combine(day, datetime.min.time()) + timedelta(hours=7)
+        sunset = call_time + timedelta(hours=12)
+
+    return {
+        "shoot_day": str(day),
+        "call_time": call_time.isoformat(),
+        "wrap_time": sunset.isoformat(),
+        "hours": round((sunset - call_time).total_seconds() / 3600, 1),
+    }
+
+
+class DayPlan(BaseModel):
+    call_time: str
+    wrap_time: str
+
+
+@router.put("/api/day")
+def set_day(body: DayPlan, request: Request, response: Response):
+    """Move the call or the planned wrap."""
+    ch = client()
+    mine = ws.workspace_id(request, response)
+    ws.fork(ch, mine)
+
+    call_time = datetime.fromisoformat(body.call_time)
+    wrap_time = datetime.fromisoformat(body.wrap_time)
+    day = call_time.date()
+
+    ch.command(
+        f"ALTER TABLE {DB}.shoot_days DELETE WHERE production_id = %(p)s",
+        parameters={"p": mine}, settings={"mutations_sync": 1},
+    )
+    scenes = [r[0] for r in ch.query(
+        f"SELECT scene_id FROM {DB}.scenes WHERE production_id = %(p)s",
+        parameters={"p": mine},
+    ).result_rows]
+
+    ch.insert("shoot_days", [[
+        mine, day, "main", "set", call_time, None,
+        call_time - timedelta(minutes=45), wrap_time, scenes,
+    ]], column_names=["production_id", "shoot_day", "unit", "location_id",
+                      "call_time", "wrap_time", "sunrise", "sunset",
+                      "planned_scenes"])
+    return {"call_time": body.call_time, "wrap_time": body.wrap_time}
 
 
 @router.get("/api/world")
@@ -114,7 +212,7 @@ def _recheck_scene(scene_id: str, production_id: str, run) -> None:
 
     flagged = 0
     for setup_id, take_id in takes:
-        path = CLIPS_DIR / f"{take_id}.mp4"
+        path = clip_path(take_id)
         if not path.exists():
             continue
         run.publish("qc", "working", f"Checking {take_id}")
@@ -567,6 +665,18 @@ def _probe_duration(path: Path) -> float:
 
 def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run,
             finish: bool = True, precomputed: dict | None = None) -> None:
+    """Wrapper so a failure is reported rather than swallowed by the thread."""
+    try:
+        _ingest_inner(paths, scene_id, setup_hint, run, finish, precomputed)
+    except Exception as exc:
+        run.publish("orchestrator", "error",
+                    f"{type(exc).__name__} — {exc}"[:300])
+        if finish:
+            run.finish()
+
+
+def _ingest_inner(paths: list[Path], scene_id: str, setup_hint: str, run,
+                  finish: bool = True, precomputed: dict | None = None) -> None:
     """Watch each clip, find the faces, write it all down."""
     from agents.vision import analyse_clip
     from google import genai
@@ -664,6 +774,8 @@ def _ingest(paths: list[Path], scene_id: str, setup_hint: str, run,
             "vfx_markers", "vfx_lens_grid", "model_id", "analysed_at"])
 
         run.publish("qc", "working", f"Checking {take_id} for problems")
+        # QC is the slowest step and the most likely to be cut off mid-stream.
+        # Losing it costs a check, not the upload.
         try:
             from agents import qc
             verdict = qc.check_take(gclient, path, period, setting, world_notes)
@@ -735,7 +847,7 @@ def _split_into_shots(source: Path, run) -> list[Path]:
         a, b = marks[i], marks[i + 1]
         if b - a < 1.5:            # flash frames are not shots
             continue
-        out = CLIPS_DIR / f"{roll}_C{len(made) + 1:03d}.mp4"
+        out = source.parent / f"{roll}_C{len(made) + 1:03d}.mp4"
         cut(source, out, a, b)
         made.append(out)
 
@@ -798,8 +910,9 @@ async def upload_film(request: Request, response: Response,
     mine = ws.workspace_id(request, response)
     ws.fork(ch, mine)
 
+    here = upload_dir(mine, "film")
     name = Path(file.filename or f"film_{uuid.uuid4().hex[:6]}.mp4").name
-    target = CLIPS_DIR.parent / name
+    target = here / name
     with target.open("wb") as out:
         shutil.copyfileobj(file.file, out)
 
@@ -810,6 +923,16 @@ async def upload_film(request: Request, response: Response,
 
 
 def _ingest_film(source: Path, workspace: str, run) -> None:
+    """Wrapper so a failure is reported rather than swallowed by the thread."""
+    try:
+        _ingest_film_inner(source, workspace, run)
+    except Exception as exc:
+        run.publish("orchestrator", "error",
+                    f"Could not take in {source.name}: {type(exc).__name__} — {exc}"[:300])
+        run.finish()
+
+
+def _ingest_film_inner(source: Path, workspace: str, run) -> None:
     from agents.vision import analyse_clip
     from google import genai
 
@@ -834,6 +957,27 @@ def _ingest_film(source: Path, workspace: str, run) -> None:
             })
         except Exception as exc:
             run.publish("vision", "error", f"{clip.stem}: {type(exc).__name__}")
+
+    # Work out the world before anything is judged against it, using frames
+    # from across the film rather than one shot.
+    run.publish("qc", "working", "Working out what world this is set in")
+    try:
+        from agents import continuity, qc
+        sample = [c for c in clips[:: max(1, len(clips) // 6)]][:6]
+        frames = [f for f in (continuity.grab_frame(c, 1.0) for c in sample) if f]
+        if frames:
+            guess = qc.infer_world(gclient, frames)
+            ch.insert("production_world", [[
+                workspace, guess.get("period", "")[:200],
+                guess.get("setting", "")[:200], guess.get("notes", "")[:400],
+                datetime.now(),
+            ]], column_names=["production_id", "period", "setting", "notes",
+                              "updated_at"])
+            run.publish("qc", "tool_result",
+                        f"Set in {guess.get('period', 'unknown')}"
+                        f" — {guess.get('setting', '')}"[:120])
+    except Exception as exc:
+        run.publish("qc", "error", f"Could not read the world: {type(exc).__name__}")
 
     run.publish("script", "working", "Sorting the shots into scenes")
     placed = _place_by_location(ch, run, workspace, clips, analyses)
@@ -868,10 +1012,11 @@ async def upload_footage(scene_id: str, request: Request, response: Response,
     run.publish("orchestrator", "started",
                 f"{len(files)} clip(s) off the card")
 
+    here = upload_dir(mine, "clips")
     saved: list[Path] = []
     for upload in files:
         name = Path(upload.filename or f"clip_{uuid.uuid4().hex[:6]}.mp4").name
-        target = CLIPS_DIR / name
+        target = here / name
         with target.open("wb") as out:
             shutil.copyfileobj(upload.file, out)
         saved.append(target)
