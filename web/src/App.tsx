@@ -12,7 +12,8 @@ export default function App() {
   const [hoursIn, setHoursIn] = useState(9);
   const [useAgent, setUseAgent] = useState(true);
   const sceneId = scene?.scene_id ?? FIRST_SCENE;
-  const { events, call, busy, error, touched, start, follow } = useRun(sceneId);
+  const { events, call, busy, error, touched, start, follow, reset } =
+    useRun(sceneId);
   const [dataKey, setDataKey] = useState(0);
   const wasBusy = useRef(false);
 
@@ -105,6 +106,13 @@ export default function App() {
           }}
           onIngested={(id) => follow(id)}
           onChanged={() => start(hoursIn, useAgent)}
+          onCleared={() => {
+            // The data is gone; anything still selected refers to rows that
+            // no longer exist, and re-rendering it looks like the reset failed.
+            setScene(null);
+            reset();
+            setDataKey((n) => n + 1);
+          }}
         />
       </main>
 

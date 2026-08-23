@@ -27,7 +27,8 @@ function oddsColour(p: number) {
   return "var(--nogo)";
 }
 
-export function Today({ call, scene, dataKey, fresh, onScene, onIngested, onChanged }: {
+export function Today({ call, scene, dataKey, fresh, onScene, onIngested,
+                       onChanged, onCleared }: {
   call: GateCall | null;
   scene: Scene | null;
   dataKey: number;
@@ -35,6 +36,7 @@ export function Today({ call, scene, dataKey, fresh, onScene, onIngested, onChan
   onScene: (s: Scene) => void;
   onIngested: (runId: string) => void;
   onChanged: () => void;
+  onCleared: () => void;
 }) {
   const [bumped, setBumped] = useState(0);
   const reloadKey = bumped + dataKey;
@@ -110,7 +112,7 @@ export function Today({ call, scene, dataKey, fresh, onScene, onIngested, onChan
         }}
         onCleared={() => {
           setReloadKey((n) => n + 1);
-          onChanged();
+          onCleared();
         }}
       />
 

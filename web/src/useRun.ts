@@ -106,5 +106,16 @@ export function useRun(scene: string) {
     };
   }, []);
 
-  return { events, call, runId, busy, error, touched, start, follow };
+  /** Forget everything — used when the workspace is emptied. */
+  const reset = useCallback(() => {
+    source.current?.close();
+    setEvents([]);
+    setCall(null);
+    setRunId(null);
+    setTouched([]);
+    setError(null);
+    setBusy(false);
+  }, []);
+
+  return { events, call, runId, busy, error, touched, start, follow, reset };
 }
