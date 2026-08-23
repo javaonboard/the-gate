@@ -12,7 +12,7 @@ export default function App() {
   const [hoursIn, setHoursIn] = useState(9);
   const [useAgent, setUseAgent] = useState(true);
   const sceneId = scene?.scene_id ?? FIRST_SCENE;
-  const { events, call, busy, error, start, follow } = useRun(sceneId);
+  const { events, call, busy, error, touched, start, follow } = useRun(sceneId);
   const [dataKey, setDataKey] = useState(0);
   const wasBusy = useRef(false);
 
@@ -22,6 +22,24 @@ export default function App() {
     if (wasBusy.current && !busy) setDataKey((n) => n + 1);
     wasBusy.current = busy;
   }, [busy]);
+
+  // Footage that has just been taken in is the thing you want to look at, so
+  // open the scene it landed in rather than leaving the old one selected.
+  useEffect(() => {
+    if (!touched.length || busy) return;
+    const landed = touched[0];
+    if (scene?.scene_id === landed) return;
+    void fetch("/api/scenes")
+      .then((r) => r.json())
+      .then((rows: Scene[]) => {
+        const found = rows.find((s) => s.scene_id === landed);
+        if (found) {
+          setScene(found);
+          void start(hoursIn, useAgent, found.scene_id);
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [touched, busy]);
 
   useEffect(() => {
     void start(hoursIn, useAgent);
@@ -80,6 +98,7 @@ export default function App() {
           call={call}
           scene={scene}
           dataKey={dataKey}
+          fresh={touched}
           onScene={(s) => {
             setScene(s);
             void start(hoursIn, useAgent, s.scene_id);

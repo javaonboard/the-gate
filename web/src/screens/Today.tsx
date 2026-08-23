@@ -27,10 +27,11 @@ function oddsColour(p: number) {
   return "var(--nogo)";
 }
 
-export function Today({ call, scene, dataKey, onScene, onIngested, onChanged }: {
+export function Today({ call, scene, dataKey, fresh, onScene, onIngested, onChanged }: {
   call: GateCall | null;
   scene: Scene | null;
   dataKey: number;
+  fresh: string[];
   onScene: (s: Scene) => void;
   onIngested: (runId: string) => void;
   onChanged: () => void;
@@ -139,7 +140,8 @@ export function Today({ call, scene, dataKey, onScene, onIngested, onChanged }: 
       <div style={{ marginTop: 28 }}>
         <SectionTitle icon="scenes">Scenes today</SectionTitle>
       </div>
-      <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey} />
+      <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey}
+                fresh={fresh} />
 
       {/* and the breakdown of the one that's open */}
       {sceneId && (

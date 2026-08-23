@@ -960,3 +960,18 @@ button.linky {
   background: var(--panel);
   color: var(--text);
 }
+
+.scene[data-fresh="true"] { border-color: var(--go); }
+
+.just-in {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--go);
+  background: var(--go-wash);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-right: 6px;
+}

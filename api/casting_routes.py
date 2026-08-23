@@ -819,7 +819,8 @@ def _ingest_inner(paths: list[Path], scene_id: str, setup_hint: str, run,
         run.publish("continuity", "error", type(exc).__name__)
 
     if finish:
-        run.publish("orchestrator", "done", f"{len(paths)} clip(s) taken in")
+        run.publish("orchestrator", "done", f"{len(paths)} clip(s) taken in",
+                    {"scenes": [scene_id], "shots": len(paths)})
         run.finish()
 
 
@@ -992,8 +993,12 @@ def _ingest_film_inner(source: Path, workspace: str, run) -> None:
         _ingest(group, scene_id, "", run, finish=False,
                 precomputed=analyses)
 
-    run.publish("orchestrator", "done",
-                f"{len(clips)} shots across {len(by_scene)} scenes")
+    made = sorted(by_scene)
+    run.publish(
+        "orchestrator", "done",
+        f"{len(clips)} shots across {len(by_scene)} scenes",
+        {"scenes": made, "shots": len(clips)},
+    )
     run.finish()
 
 

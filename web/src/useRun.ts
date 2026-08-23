@@ -10,6 +10,7 @@ export function useRun(scene: string) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [call, setCall] = useState<GateCall | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  const [touched, setTouched] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const source = useRef<EventSource | null>(null);
@@ -46,6 +47,10 @@ export function useRun(scene: string) {
             setError(event.message);
             setBusy(false);
           }
+          if (event.phase === "done" && event.agent === "orchestrator") {
+            const scenes = (event.data?.scenes as string[]) ?? [];
+            if (scenes.length) setTouched(scenes);
+          }
           if (event.phase === "complete") {
             setBusy(false);
             es.close();
@@ -81,6 +86,10 @@ export function useRun(scene: string) {
       if (event.phase === "result") {
         setCall({ ...(event.data as unknown as GateCall), run_id: id });
       }
+      if (event.phase === "done" && event.agent === "orchestrator") {
+        const scenes = (event.data?.scenes as string[]) ?? [];
+        if (scenes.length) setTouched(scenes);
+      }
       if (event.phase === "complete") {
         setBusy(false);
         es.close();
@@ -97,5 +106,5 @@ export function useRun(scene: string) {
     };
   }, []);
 
-  return { events, call, runId, busy, error, start, follow };
+  return { events, call, runId, busy, error, touched, start, follow };
 }

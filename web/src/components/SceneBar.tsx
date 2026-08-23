@@ -23,10 +23,11 @@ export type Scene = {
   complete: boolean;
 };
 
-export function SceneBar({ selected, onSelect, reloadKey }: {
+export function SceneBar({ selected, onSelect, reloadKey, fresh = [] }: {
   selected: string;
   onSelect: (scene: Scene) => void;
   reloadKey: number;
+  fresh?: string[];
 }) {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [adding, setAdding] = useState(false);
@@ -65,12 +66,14 @@ export function SceneBar({ selected, onSelect, reloadKey }: {
           key={s.scene_id}
           className="scene"
           data-active={selected === s.scene_id}
+          data-fresh={fresh.includes(s.scene_id)}
           onClick={() => onSelect(s)}
         >
           <span className="scene-no">{s.number}</span>
           <span className="scene-body">
             <b>{s.place}</b>
             <small>
+              {fresh.includes(s.scene_id) && <em className="just-in">just in</em>}
               {s.where} · {s.takes ? `${s.takes} takes` : "nothing shot"}
               {s.people > 0 && ` · ${s.people} on camera`}
             </small>
