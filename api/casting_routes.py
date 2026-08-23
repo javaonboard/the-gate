@@ -836,16 +836,20 @@ def _split_into_shots(source: Path, run) -> list[Path]:
     which is what the coverage question is actually about, so the file has to
     be broken at those cuts before anything else can make sense of it.
     """
-    from data.split_takes import cut, detect_cuts, duration_of
+    from data.split_takes import cut, duration_of, find_shots
 
     run.publish("vision", "working", f"Finding the cuts in {source.name}")
-    boundaries = detect_cuts(source, 0.35, 0.0, 0.0)
     end = duration_of(source)
-    marks = [0.0] + boundaries + [end]
+
+    def note(level, found, mean_shot):
+        run.publish("vision", "tool_result",
+                    f"{found} cuts at threshold {level:.3f} — "
+                    f"{mean_shot:.0f}s average shot")
+
+    marks = find_shots(source, end, on_step=note)
 
     run.publish("vision", "tool_result",
-                f"{max(0, len(marks) - 2)} cuts found in "
-                f"{end / 60:.0f} minutes")
+                f"{max(0, len(marks) - 1)} shots in {end / 60:.0f} minutes")
 
     roll = f"U{uuid.uuid4().hex[:3].upper()}"
     made: list[Path] = []

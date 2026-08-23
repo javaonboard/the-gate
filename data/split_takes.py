@@ -21,8 +21,30 @@ from pathlib import Path
 SHOWINFO_PTS = re.compile(r"pts_time:([0-9.]+)")
 
 
-def detect_cuts(path, threshold, start, end):
-    """Return shot-boundary timestamps in seconds, on the source timeline.
+# How hard a visual change has to be to count as a cut. Edited drama scores
+# well above this; raw camera footage, dark scenes and slow dissolves score far
+# lower, which is why one fixed number does not work.
+DEFAULT_THRESHOLD = 0.12
+
+# If the average shot comes out longer than this, the detector is missing cuts
+# and the threshold comes down. Measured on real footage: a 22-minute piece
+# gave 24 cuts and a 53s average at 0.12, which is right, while dropping to
+# 0.06 gave 121 "cuts" with a one-second median — noise, not shots. Anything
+# genuinely long is handled by MAX_SHOT_SECONDS instead of by chasing it with
+# the threshold.
+PLAUSIBLE_MEAN_SHOT = 75.0
+
+# Below this a detection is a flash, a flicker or a compression artefact
+# rather than a shot.
+MIN_SHOT_SECONDS = 1.5
+
+# Nothing is one shot for this long. Anything longer is split anyway, because a
+# seventeen-minute "take" is useless to every step downstream.
+MAX_SHOT_SECONDS = 150.0
+
+
+def detect_cuts(path, threshold=DEFAULT_THRESHOLD, start=0.0, end=0.0):
+    """Shot-boundary timestamps, in seconds, on the source timeline.
 
     Detection runs over the whole file with no seeking — trimming the input
     shifts the reported pts_time and makes the offsets wrong.
@@ -39,6 +61,48 @@ def detect_cuts(path, threshold, start, end):
     if end:
         times = [t for t in times if t <= end]
     return times
+
+
+def find_shots(path, duration, threshold=DEFAULT_THRESHOLD, on_step=None):
+    """Work out where the shots are, lowering the bar until it looks sane.
+
+    A first pass at the usual threshold suits edited footage. When the result
+    implies improbably long shots — raw camera takes, a dark scene, gradual
+    transitions — the threshold comes down and it tries again. Anything still
+    too long at the end is divided on length, because an unsplit twenty-minute
+    block helps nobody.
+    """
+    cuts: list[float] = []
+
+    for attempt, level in enumerate((threshold, threshold / 2, threshold / 4), 1):
+        cuts = detect_cuts(path, level)
+        mean_shot = duration / max(1, len(cuts) + 1)
+        if on_step:
+            on_step(level, len(cuts), mean_shot)
+        if mean_shot <= PLAUSIBLE_MEAN_SHOT or attempt == 3:
+            break
+
+    # drop detections too close together to be real shots
+    kept: list[float] = []
+    for t in cuts:
+        if not kept or t - kept[-1] >= MIN_SHOT_SECONDS:
+            kept.append(t)
+
+    bounds = [0.0] + kept + [duration]
+
+    # last resort: cut anything still enormous into even pieces
+    split: list[float] = [0.0]
+    for i in range(len(bounds) - 1):
+        a, b = bounds[i], bounds[i + 1]
+        span = b - a
+        if span > MAX_SHOT_SECONDS:
+            pieces = int(span // MAX_SHOT_SECONDS) + 1
+            step = span / pieces
+            for k in range(1, pieces):
+                split.append(a + step * k)
+        split.append(b)
+
+    return sorted(set(split))
 
 
 def duration_of(path):
@@ -66,7 +130,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
     ap.add_argument("--outdir", default="../footage/clips")
-    ap.add_argument("--threshold", type=float, default=0.35)
+    ap.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     ap.add_argument("--min-seconds", type=float, default=1.5)
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--end", type=float, default=0.0)
@@ -79,9 +143,14 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
 
     print("detecting cuts...")
-    cuts = detect_cuts(src, args.threshold, args.start, args.end)
     end = args.end or duration_of(src)
-    bounds = [args.start] + cuts + [end]
+    bounds = find_shots(
+        src, end, args.threshold,
+        on_step=lambda lvl, n, mean: print(
+            f"  threshold {lvl:.3f}: {n} cuts, {mean:.0f}s average shot"),
+    )
+    if args.start:
+        bounds = [b for b in bounds if b >= args.start] or [args.start, end]
 
     manifest = []
     n = 0

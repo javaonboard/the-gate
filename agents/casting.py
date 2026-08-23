@@ -302,25 +302,58 @@ def next_name(existing: int) -> str:
 
 # --- the pass ---------------------------------------------------------------
 
+# One frame is a poor sample of a take. Someone can be facing camera for two
+# seconds of a ninety-second shot and away for the rest — measured on real
+# footage, a face visible at 5s was gone by 30s. Sampling starts early because
+# actors are most often framed at the top of a take, before the move.
+FRAME_MARKS = (0.05, 0.3, 0.55, 0.8)
+
+# Stop once a frame shows this many people; more sampling costs money for
+# little gain.
+ENOUGH_FACES = 2
+
+
+def best_frame(client: genai.Client, video: Path, duration: float
+               ) -> tuple[bytes | None, list[dict[str, Any]]]:
+    """Look at a few moments and keep whichever shows the most faces."""
+    marks = [duration * f for f in FRAME_MARKS]
+    best: tuple[bytes | None, list[dict[str, Any]]] = (None, [])
+
+    for at in marks:
+        frame = grab_frame(video, max(0.3, at))
+        if not frame:
+            continue
+        try:
+            response = retry(
+                client.models.generate_content,
+                model=MODEL,
+                contents=[types.Part.from_bytes(data=frame, mime_type="image/png"),
+                          PROMPT],
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                    response_schema=PEOPLE_SCHEMA,
+                ),
+            )
+            people = json.loads(response.text).get("people", [])
+        except Exception:
+            continue
+
+        if len(people) > len(best[1]):
+            best = (frame, people)
+        if len(people) >= ENOUGH_FACES:
+            break
+
+    return best
+
+
 def analyse_take(client: genai.Client, ch, production_id: str, scene_id: str,
                  setup_id: str, take_id: str, video: Path, duration: float,
                  known: int) -> list[dict[str, Any]]:
     """Find the people in one take and resolve them to characters."""
-    frame = grab_frame(video, max(0.4, duration * 0.4))
+    frame, people = best_frame(client, video, duration or 3.0)
     if not frame:
         return []
-
-    response = retry(
-        client.models.generate_content,
-        model=MODEL,
-        contents=[types.Part.from_bytes(data=frame, mime_type="image/png"), PROMPT],
-        config=types.GenerateContentConfig(
-            temperature=0,
-            response_mime_type="application/json",
-            response_schema=PEOPLE_SCHEMA,
-        ),
-    )
-    people = json.loads(response.text).get("people", [])
 
     links: list[dict[str, Any]] = []
     for person in people:
