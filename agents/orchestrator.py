@@ -24,6 +24,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from agents import historian, scout
+from agents.resilience import is_transient
 from api.events import Run, adk_callbacks, step
 from core.coverage import connect
 from core.gate import GateReport, build_report
@@ -235,10 +236,14 @@ async def run_gate(scene_id: str, now: datetime, call: datetime,
                 if said:
                     spoken = "".join(said).strip()
                 s.result(spoken)
-        except Exception as exc:  # the computed call still stands
+        except Exception as exc:
+            # The numbers are already worked out; only the wording is lost.
+            # Say which, so a dropped connection is not mistaken for a bad call.
             if run:
-                run.publish("orchestrator", "error",
-                            f"Falling back to the computed call: {exc}")
+                reason = ("the model connection dropped" if is_transient(exc)
+                          else f"{type(exc).__name__}")
+                run.publish("orchestrator", "working",
+                            f"Reporting the computed call — {reason}")
 
     return {"report": report, "spoken": spoken, "brief": brief}
 

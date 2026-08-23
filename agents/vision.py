@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from agents.resilience import retry
+
 load_dotenv()
 
 MODEL = os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.7-flash")
@@ -88,7 +90,8 @@ def analyse_clip(client, clip):
     path = Path(clip["path"])
     data = path.read_bytes()
 
-    response = client.models.generate_content(
+    response = retry(
+        client.models.generate_content,
         model=MODEL,
         contents=[
             types.Part.from_bytes(data=data, mime_type="video/mp4"),

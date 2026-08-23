@@ -163,17 +163,22 @@ def clear_workspace(request: Request, response: Response):
     ch = client()
     mine = ws.workspace_id(request, response)
 
+    # mutations_sync=2 waits for the delete to actually finish on every
+    # replica. Without it ClickHouse returns immediately, the page reloads
+    # before the rows are gone, and everything appears to come back.
+    wait = {"mutations_sync": 2}
+
     for table in ("scenes", "setups", "takes", "take_analysis",
                   "take_characters", "characters", "shoot_days", "crew_hours",
                   "take_problems"):
         ch.command(
             f"ALTER TABLE {DB}.{table} DELETE WHERE production_id = %(p)s",
-            parameters={"p": mine},
+            parameters={"p": mine}, settings=wait,
         )
     ch.command(
         f"ALTER TABLE {DB}.character_requirements DELETE "
         f"WHERE startsWith(scene_id, %(p)s)",
-        parameters={"p": mine},
+        parameters={"p": mine}, settings=wait,
     )
 
     # an empty production, so nothing falls back to the shared demo
@@ -203,7 +208,7 @@ def scenes(request: Request, response: Response):
                uniqExact(t.setup_id) AS positions
         FROM {DB}.scenes AS s
         LEFT JOIN {DB}.takes AS t ON t.scene_id = s.scene_id
-        WHERE s.production_id = %(p)s
+        WHERE s.production_id = %(p)s AND s.location_id != 'nothing_yet'
         GROUP BY s.scene_id, s.location_id, s.int_ext, s.day_night, s.synopsis
         ORDER BY s.scene_id
         """,

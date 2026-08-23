@@ -42,6 +42,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from agents.resilience import retry
 from core.coverage import connect
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -182,7 +183,8 @@ def compare_scene(client: genai.Client, ch, scene_id: str, clips: Path
 
     parts.append(types.Part.from_text(text=PROMPT))
 
-    response = client.models.generate_content(
+    response = retry(
+        client.models.generate_content,
         model=MODEL,
         contents=parts,
         config=types.GenerateContentConfig(

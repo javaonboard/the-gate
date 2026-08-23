@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from agents.resilience import retry
 from core.coverage import connect
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -177,7 +178,8 @@ def world_of(ch, production_id: str) -> tuple[str, str, str]:
 def check_take(client: genai.Client, path: Path, period: str = "",
                setting: str = "", notes: str = "") -> dict[str, Any]:
     """Watch one take and report what would stop it being used."""
-    response = client.models.generate_content(
+    response = retry(
+        client.models.generate_content,
         model=MODEL,
         contents=[
             types.Part.from_bytes(data=path.read_bytes(), mime_type="video/mp4"),

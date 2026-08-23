@@ -31,6 +31,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 
+from agents.resilience import retry
 from core.coverage import connect
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -250,7 +251,8 @@ def confirm_identity(client: genai.Client, face: Image.Image,
     parts.append(types.Part.from_text(text=IDENTITY_PROMPT))
 
     try:
-        response = client.models.generate_content(
+        response = retry(
+            client.models.generate_content,
             model=MODEL,
             contents=parts,
             config=types.GenerateContentConfig(
@@ -308,7 +310,8 @@ def analyse_take(client: genai.Client, ch, production_id: str, scene_id: str,
     if not frame:
         return []
 
-    response = client.models.generate_content(
+    response = retry(
+        client.models.generate_content,
         model=MODEL,
         contents=[types.Part.from_bytes(data=frame, mime_type="image/png"), PROMPT],
         config=types.GenerateContentConfig(
