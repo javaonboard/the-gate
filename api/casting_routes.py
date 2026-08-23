@@ -829,39 +829,79 @@ def _ingest_inner(paths: list[Path], scene_id: str, setup_hint: str, run,
         run.finish()
 
 
-def _split_into_shots(source: Path, run) -> list[Path]:
-    """Cut a long file at every camera change.
+# What the Editor says about a boundary tells us whether the camera moved or
+# only stopped. That is the difference between a new setup and another take of
+# the one we are already on, and nobody should have to type it in.
+NEW_SETUP_SIGNS = ("repositioned", "new location", "new angle", "cut to",
+                   "different angle", "moved")
 
-    A whole film is not a take. Every cut in it is a different camera position,
-    which is what the coverage question is actually about, so the file has to
-    be broken at those cuts before anything else can make sense of it.
+
+def _starts_new_setup(what_changed: str) -> bool:
+    return any(sign in (what_changed or "").lower() for sign in NEW_SETUP_SIGNS)
+
+
+def _split_into_shots(source: Path, run) -> list[dict]:
+    """Cut a long file into shots, deciding the boundaries by watching it.
+
+    A whole film is not a take. Frame-difference detection finds the obvious
+    hard cuts and misses everything else — measured on real footage it found
+    five shots in twenty-two minutes, one of them seventeen minutes long. So
+    ffmpeg proposes and the Editor decides, which also tells us why each
+    boundary is there.
     """
-    from data.split_takes import cut, duration_of, find_shots
+    from google import genai
 
-    run.publish("vision", "working", f"Finding the cuts in {source.name}")
-    end = duration_of(source)
+    from agents import editor
+    from data.split_takes import cut, duration_of
+    from data.split_takes import find_shots as detector_shots
 
-    def note(level, found, mean_shot):
-        run.publish("vision", "tool_result",
-                    f"{found} cuts at threshold {level:.3f} — "
-                    f"{mean_shot:.0f}s average shot")
+    total = duration_of(source)
+    run.publish("editor", "working",
+                f"Watching {source.name} — {total / 60:.0f} minutes")
 
-    marks = find_shots(source, end, on_step=note)
+    # cheap candidates first; the model never sees them, so it cannot simply
+    # agree with them
+    try:
+        marks = detector_shots(source, total)
+        candidates = marks[1:-1]
+    except Exception:
+        candidates = []
 
-    run.publish("vision", "tool_result",
-                f"{max(0, len(marks) - 1)} shots in {end / 60:.0f} minutes")
+    shots = editor.find_shots(
+        genai.Client(), source, candidates,
+        on_step=lambda at, whole: run.publish(
+            "editor", "working",
+            f"Watching {at / 60:.0f}–"
+            f"{min(at + editor.WINDOW_SECONDS, whole) / 60:.0f} min"),
+    )
+
+    slates = sum(1 for s in shots if s.get("is_slate"))
+    run.publish("editor", "tool_result",
+                f"{len(shots)} shots"
+                + (f", {slates} marked with a slate" if slates else ""))
 
     roll = f"U{uuid.uuid4().hex[:3].upper()}"
-    made: list[Path] = []
-    for i in range(len(marks) - 1):
-        a, b = marks[i], marks[i + 1]
-        if b - a < 1.5:            # flash frames are not shots
-            continue
-        out = source.parent / f"{roll}_C{len(made) + 1:03d}.mp4"
-        cut(source, out, a, b)
-        made.append(out)
+    made: list[dict] = []
+    setup_index = 0
 
-    run.publish("vision", "tool_result", f"{len(made)} shots cut")
+    for shot in shots:
+        if shot["seconds"] < 1.5:
+            continue
+        if not made or _starts_new_setup(shot["what_changed"]):
+            setup_index += 1
+
+        out = source.parent / f"{roll}_C{len(made) + 1:03d}.mp4"
+        cut(source, out, shot["starts_at"], shot["ends_at"])
+        made.append({
+            "path": out,
+            "setup_index": setup_index,
+            "why": shot["what_changed"],
+            "is_slate": bool(shot.get("is_slate")),
+            "seconds": shot["seconds"],
+        })
+
+    run.publish("editor", "tool_result",
+                f"{len(made)} shots across {setup_index} camera positions")
     return made
 
 
@@ -949,11 +989,14 @@ def _ingest_film_inner(source: Path, workspace: str, run) -> None:
     ch = connect()
     gclient = genai.Client()
 
-    clips = _split_into_shots(source, run)
-    if not clips:
+    pieces = _split_into_shots(source, run)
+    if not pieces:
         run.publish("orchestrator", "error", "No shots found in that file")
         run.finish()
         return
+
+    clips = [p["path"] for p in pieces]
+    setup_of = {p["path"].stem: p["setup_index"] for p in pieces}
 
     analyses: dict[str, dict] = {}
     for i, clip in enumerate(clips, start=1):
@@ -999,8 +1042,15 @@ def _ingest_film_inner(source: Path, workspace: str, run) -> None:
             by_scene.setdefault(scene_id, []).append(clip)
 
     for scene_id, group in by_scene.items():
-        _ingest(group, scene_id, "", run, finish=False,
-                precomputed=analyses)
+        # keep the Editor's grouping: shots it called "camera stopped and
+        # restarted" are further takes of one setup, not new ones
+        by_setup: dict[int, list[Path]] = {}
+        for clip in group:
+            by_setup.setdefault(setup_of.get(clip.stem, 0), []).append(clip)
+
+        for index, takes in sorted(by_setup.items()):
+            _ingest(takes, scene_id, f"{scene_id}_{chr(64 + max(1, index))}",
+                    run, finish=False, precomputed=analyses)
 
     made = sorted(by_scene)
     run.publish(
