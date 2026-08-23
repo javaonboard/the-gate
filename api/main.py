@@ -50,6 +50,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def attach_workspace(request: Request, call_next):
+    """Give every visitor one workspace, and only one.
+
+    Routes used to mint an id whenever a request arrived without a cookie. The
+    interface opens half a dozen requests at once on load, so each got its own
+    workspace and the last Set-Cookie won — which made a reset look like it had
+    failed, because the next request belonged to a different workspace that had
+    never been cleared.
+    """
+    existing = request.cookies.get(ws.COOKIE)
+    minted = None
+    if not existing or not existing.startswith("ws_"):
+        minted = ws.new_workspace_id()
+        # so handlers in this request see it too
+        request.scope.setdefault("state", {})
+        request.state.workspace = minted
+
+    response = await call_next(request)
+
+    if minted:
+        response.set_cookie(
+            ws.COOKIE, minted, max_age=ws.COOKIE_MAX_AGE,
+            httponly=True, samesite="lax",
+        )
+    return response
+
+
+@app.get("/api/session")
+def session(request: Request):
+    """Settle the workspace before the interface asks for anything else."""
+    return {"workspace": ws.workspace_id(request)}
+
+
 app.include_router(casting_router)
 
 # Cropped faces, served straight to the interface.

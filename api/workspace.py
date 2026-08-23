@@ -61,19 +61,25 @@ FORKED: dict[str, list[str]] = {
 }
 
 
+def new_workspace_id() -> str:
+    return f"ws_{uuid.uuid4().hex[:10]}"
+
+
 def workspace_id(request: Request, response: Response | None = None) -> str:
-    """This visitor's workspace, minted on first sight."""
+    """This visitor's workspace.
+
+    Minting happens once, in middleware, so that several requests arriving
+    together all belong to the same workspace. Handlers only read it.
+    """
     existing = request.cookies.get(COOKIE)
     if existing and existing.startswith("ws_"):
         return existing
 
-    fresh = f"ws_{uuid.uuid4().hex[:10]}"
-    if response is not None:
-        response.set_cookie(
-            COOKIE, fresh, max_age=COOKIE_MAX_AGE,
-            httponly=True, samesite="lax",
-        )
-    return fresh
+    decided = getattr(getattr(request, "state", None), "workspace", None)
+    if decided:
+        return decided
+
+    return new_workspace_id()
 
 
 def has_own_copy(ch, workspace: str) -> bool:

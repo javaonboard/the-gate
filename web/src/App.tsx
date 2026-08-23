@@ -42,11 +42,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [touched, busy]);
 
+  const [ready, setReady] = useState(false);
+
+  // Settle the workspace first. Firing everything at once gave each request
+  // its own workspace, and the last cookie set won.
   useEffect(() => {
+    void fetch("/api/session")
+      .then(() => setReady(true))
+      .catch(() => setReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
     void start(hoursIn, useAgent);
     // first call only; after that the AD asks
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   const shootClock = new Date(2026, 7, 16, 7, 0);
   shootClock.setMinutes(shootClock.getMinutes() + hoursIn * 60);
@@ -89,13 +100,15 @@ export default function App() {
       <ActivityLine events={events} busy={busy} />
 
       <main>
+        {!ready && <div className="empty">Starting up…</div>}
+
         {error && (
           <div className="empty" style={{ color: "var(--nogo)" }}>
             {error} — is the backend running on :8080?
           </div>
         )}
 
-        <Today
+        {ready && <Today
           call={call}
           scene={scene}
           dataKey={dataKey}
@@ -113,7 +126,7 @@ export default function App() {
             reset();
             setDataKey((n) => n + 1);
           }}
-        />
+        />}
       </main>
 
     </div>

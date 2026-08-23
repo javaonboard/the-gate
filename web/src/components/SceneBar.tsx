@@ -42,6 +42,7 @@ export function SceneBar({ selected, onSelect, reloadKey, fresh = [] }: {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
 
   async function create() {
