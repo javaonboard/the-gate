@@ -536,8 +536,13 @@ def coverage_matrix(scene_id: str, request: Request, response: Response):
     ch = client()
     scene_id = ws.scene_for(ch, ws.workspace_id(request, response), scene_id)
     rows = cc.matrix(ch, scene_id)
+    takes = ch.query(
+        f"SELECT count() FROM {DB}.takes WHERE scene_id = %(s)s",
+        parameters={"s": scene_id},
+    ).result_rows[0][0]
     return {"scene_id": scene_id, "bands": cc.BANDS,
             "band_help": cc.BAND_HELP, "band_label": cc.BAND_LABEL,
+            "takes": takes,
             "characters": cc.as_json(rows), "summary": cc.summarise(rows)}
 
 

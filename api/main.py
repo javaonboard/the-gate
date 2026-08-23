@@ -154,6 +154,7 @@ def serialise(report) -> dict[str, Any]:
         "summary": report.summary(),
         "coverage": {
             "completeness": round(report.coverage.completeness, 3),
+            "judged": report.coverage.judged,
             "people": report.coverage.people,
             "have": report.coverage.summary["have"],
             "required": report.coverage.summary["required"],

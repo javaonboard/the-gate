@@ -72,8 +72,14 @@ class Coverage:
     summary: dict
 
     @property
+    def judged(self) -> bool:
+        """Whether there was anything here to have an opinion about."""
+        return bool(self.summary.get("judged"))
+
+    @property
     def go(self) -> bool:
-        return not self.summary["missing"]
+        # Nothing to be short of is not the same as nothing missing.
+        return self.judged and not self.summary["missing"]
 
     @property
     def completeness(self) -> float:
@@ -110,6 +116,8 @@ class GateReport:
 
     @property
     def verdict(self) -> str:
+        if not self.coverage.judged:
+            return "NOT CHECKED"
         return "GO" if self.go else "NO-GO"
 
     @property
@@ -127,6 +135,16 @@ class GateReport:
     def summary(self) -> str:
         """The one sentence an AD needs."""
         p = self.baseline.p_make_the_day
+
+        if not self.coverage.judged:
+            takes = len(getattr(self.coverage, "rows", []))
+            return (
+                "Nobody has been found on camera in this scene yet, so there is "
+                "nothing to check coverage against. If people should be in it, "
+                "the footage may not have been looked at — or they may not be "
+                "recognisable in it."
+            )
+
         if self.go:
             return (f"Everyone's covered. {p:.0%} chance of making the day, "
                     f"hard stop {self.baseline.hard_stop:%H:%M}.")

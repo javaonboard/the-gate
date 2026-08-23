@@ -32,6 +32,7 @@ export type GateCall = {
   spoken?: string;
   coverage: {
     completeness: number;
+    judged?: boolean;
     takes: number;
     exposure_usd: number;
     requirements: Requirement[];

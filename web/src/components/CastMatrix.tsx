@@ -28,6 +28,7 @@ type Row = {
 };
 
 type Matrix = {
+  takes: number;
   bands: string[];
   band_label: Record<string, string>;
   band_help: Record<string, string>;
@@ -93,11 +94,24 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
   }
 
   if (!data) return null;
+
   if (!data.characters.length) {
+    // Two different situations that used to read the same. No footage means
+    // drop some in; footage with nobody in it means there is nothing to be
+    // short of, which is not the same as being covered.
+    const where = sceneName || "this scene";
     return (
       <div className="empty">
-        Nothing shot in {sceneName || "this scene"} yet. Drop footage in and the
-        cast builds itself.
+        {data.takes > 0 ? (
+          <>
+            <b>No one on camera in {where}.</b> {data.takes} take
+            {data.takes > 1 ? "s" : ""} logged, but no faces were found — so
+            there is nothing to check coverage against. If people should be in
+            it, they may be too small, too dark or facing away to recognise.
+          </>
+        ) : (
+          <>Nothing shot in {where} yet. Drop footage in and the cast builds itself.</>
+        )}
       </div>
     );
   }

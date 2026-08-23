@@ -47,7 +47,11 @@ export function Today({ call, scene, dataKey, fresh, onScene, onIngested, onChan
       <div className="topline">
         {call ? (
           <>
-            <span className="badge" data-go={call.go}>
+            <span
+              className="badge"
+              data-go={call.go}
+              data-unjudged={call.coverage.judged === false}
+            >
               {call.verdict}
             </span>
 
@@ -59,7 +63,11 @@ export function Today({ call, scene, dataKey, fresh, onScene, onIngested, onChan
             </span>
 
             <span className="topstat">
-              <b>{pct(call.coverage.completeness)}</b>
+              <b>
+                {call.coverage.judged === false
+                  ? "—"
+                  : pct(call.coverage.completeness)}
+              </b>
               <small>shots we have</small>
             </span>
 

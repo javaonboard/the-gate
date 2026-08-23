@@ -975,3 +975,5 @@ button.linky {
   border-radius: 999px;
   margin-right: 6px;
 }
+
+.badge[data-unjudged="true"] { color: var(--muted); background: var(--panel-2); }

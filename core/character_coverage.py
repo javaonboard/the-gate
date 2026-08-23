@@ -208,11 +208,16 @@ def summarise(rows: list[CharacterRow]) -> dict:
     ]
     required = sum(1 for r in rows for c in r.cells.values() if c.required)
     have = sum(1 for r in rows for c in r.cells.values() if c.required and c.have)
+
+    # No people is not the same as no gaps. A scene nobody appears in has
+    # nothing to be short of, and calling that "covered" would let the crew
+    # walk away from a scene that was never really checked.
     return {
         "characters": len(rows),
         "required": required,
         "have": have,
-        "completeness": round(have / required, 3) if required else 1.0,
+        "judged": required > 0,
+        "completeness": round(have / required, 3) if required else 0.0,
         "missing": sorted(missing, key=lambda m: -m["recover_cost_usd"]),
         "exposure_usd": sum(m["recover_cost_usd"] for m in missing),
     }
