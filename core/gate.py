@@ -1,11 +1,7 @@
-"""The gate — coverage and clock, together.
+"""The gate, coverage and clock, together.
 
 Coverage alone says what is missing. The simulator alone says whether the day
-holds. Neither is actionable. This puts them side by side and prices the choice:
-what does it cost to grab a missing shot now, against what it costs to come back
-for it later?
-
-That comparison is the product. Everything else feeds it.
+holds. Neither is actionable.
 """
 
 from __future__ import annotations
@@ -20,7 +16,8 @@ from core.simulator import (
     pending_setups,
     simulate,
 )
-from core.union_rules import Person
+from core.union_rules import (STOPS_THE_DAY, DayAssessment, Person,
+                              Violation, assess_day)
 
 
 @dataclass
@@ -109,13 +106,34 @@ class GateReport:
     coverage: Coverage
     baseline: SimulationResult
     options: list[RecoveryOption] = field(default_factory=list)
+    compliance: DayAssessment | None = None
+
+    @property
+    def blocked_by_rule(self) -> list[Violation]:
+        """Rules that stop the day rather than cost money.
+
+Overtime, a late meal and an invaded turnaround are expensive, not
+        forbidden, a production chooses to pay them, and saying NO-GO on cost
+        would be inventing a rule that does not exist.
+        """
+        if self.compliance is None:
+            return []
+        return [v for v in self.compliance.violations
+                if v.rule in STOPS_THE_DAY]
 
     @property
     def go(self) -> bool:
-        return self.coverage.go
+        # A GO is never returned without the rule check having run. It is a
+        # statement that the company can move, and that cannot be said from
+        # coverage alone.
+        if self.compliance is None:
+            return False
+        return self.coverage.go and not self.blocked_by_rule
 
     @property
     def verdict(self) -> str:
+        if self.compliance is None:
+            return "NOT CHECKED"
         if not self.coverage.judged:
             return "NOT CHECKED"
         return "GO" if self.go else "NO-GO"
@@ -185,7 +203,8 @@ def build_report(client, scene_id: str, now: datetime, call: datetime,
                  completed_setup_ids: set[str] | None = None,
                  trials: int = 10_000, distant: bool = False) -> GateReport:
     rows = cc.matrix(client, scene_id)
-    coverage = Coverage(rows=rows, summary=cc.summarise(rows))
+    scene = cc.scene_shots(client, scene_id)
+    coverage = Coverage(rows=rows, summary=cc.summarise(rows, scene))
 
     remaining = pending_setups(client, scene_id, completed_setup_ids)
     baseline = simulate(client, remaining, now=now, call=call, crew=crew,
@@ -195,7 +214,7 @@ def build_report(client, scene_id: str, now: datetime, call: datetime,
     template = remaining[0] if remaining else None
 
     if template is not None:
-        # most expensive to recover first — that is the one worth the argument
+        # most expensive to recover first, that is the one worth the argument
         for req in sorted(coverage.missing(),
                           key=lambda m: -m.recover_cost_usd):
             with_recovery = remaining + [_recovery_setup(req, template)]
@@ -208,8 +227,14 @@ def build_report(client, scene_id: str, now: datetime, call: datetime,
                 p_make_day_after=after.p_make_the_day,
             ))
 
+    # The rules are assessed against the day this simulation actually expects,
+    # so the verdict and the cost describe the same day.
+    compliance = assess_day(call, baseline.median_wrap, crew,
+                            next_call=next_call, distant=distant)
+
     return GateReport(scene_id=scene_id, now=now, coverage=coverage,
-                      baseline=baseline, options=options)
+                      baseline=baseline, options=options,
+                      compliance=compliance)
 
 
 def render(report: GateReport) -> str:

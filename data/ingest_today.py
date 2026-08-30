@@ -3,17 +3,7 @@
 Takes the Vision Agent's output for one location, turns it into a production,
 a shoot day, a scene, its editorial requirements, setups and takes, and loads it
 into ClickHouse alongside the studio's historical library.
-
-Clips at the same location that share a framing and screen direction are treated
-as one setup; the clips within it are its takes. That mirrors how a set actually
-works — the camera is placed once and rolls several times.
-
-Use --hold to withhold specific clips. Without a missing angle the gate always
-says GO, and there is nothing to demonstrate.
-
-    python data/ingest_today.py --location "canal street" --list
-    python data/ingest_today.py --location "canal street" --hold A001_C046,A001_C060
-"""
+    """
 
 import argparse
 import json

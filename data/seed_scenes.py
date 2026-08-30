@@ -1,15 +1,9 @@
 """Turn the analysed footage into scenes.
 
-A scene is one continuous piece of story in one place — the canal street, the
+A scene is one continuous piece of story in one place, the canal street, the
 workshop, the tower balcony. The Vision Agent already worked out where each clip
 was shot; this makes each of those places a scene you can shoot into.
-
-Camera positions inside a scene are worked out from the framing, because that is
-bookkeeping nobody should have to do by hand.
-
-    python -m data.seed_scenes
-    python -m data.seed_scenes --min-clips 4 --reset
-"""
+    """
 
 from __future__ import annotations
 

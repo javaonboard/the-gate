@@ -1,12 +1,9 @@
-"""Vision Agent — analyse a take with Gemini.
+"""Vision Agent, analyse a take with Gemini.
 
 Reads each clip, asks Gemini for structured analysis, and writes the results to
 JSON. Keeping analysis and database insert as separate steps means a failed
 write never costs a second round of API calls.
-
-    python agents/vision.py --manifest ../footage/clips/manifest.json --limit 5
-    python agents/vision.py --manifest ../footage/clips/manifest.json
-"""
+    """
 
 import argparse
 import json
@@ -17,6 +14,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+from agents import gemini
 
 from agents.resilience import retry
 
@@ -72,18 +71,7 @@ PROMPT = """You are a script supervisor logging a take on a film set.
 
 Watch this clip and describe it factually. It is one continuous camera setup
 from a finished film.
-
-Be precise about:
-- shot size, using standard film terms
-- camera movement
-- who is in frame and which way they are looking
-- whether the subject is sharp, and whether anything is technically wrong
-- whether this looks like a VFX plate rather than a performance take
-
-For location_label, use a short consistent phrase. Clips shot in the same place
-must get the same label, because these labels are used to group takes into scenes.
-
-Do not speculate about story. Report only what is visible."""
+"""
 
 
 def analyse_clip(client, clip):
@@ -97,14 +85,14 @@ def analyse_clip(client, clip):
             types.Part.from_bytes(data=data, mime_type="video/mp4"),
             PROMPT,
         ],
-        config=types.GenerateContentConfig(
+        config=gemini.config(
             temperature=0,
             response_mime_type="application/json",
             response_schema=RESPONSE_SCHEMA,
         ),
     )
 
-    result = json.loads(response.text)
+    result = json.loads(gemini.text_of(response))
     result["clip_name"] = clip["clip_name"]
     result["camera_roll"] = clip["camera_roll"]
     result["duration_s"] = clip["duration_s"]
@@ -125,7 +113,7 @@ def main():
     if args.limit:
         clips = clips[: args.limit]
 
-    client = genai.Client()
+    client = gemini.client()
     results, failures = [], []
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:

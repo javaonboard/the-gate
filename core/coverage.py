@@ -1,11 +1,6 @@
 """Coverage matrix and the gate decision.
 
 Answers the question the 1st AD actually asks: can we move on?
-
-Deliberately not an LLM. Whether a scene is covered is a matching problem
-between what an editor needs and what is on the card — it has a correct answer,
-and a correct answer should be computed, not generated. The agent explains this
-decision; it does not make it.
 """
 
 from __future__ import annotations
@@ -89,7 +84,7 @@ class GateDecision:
 
     @property
     def blocking(self) -> list[Requirement]:
-        """Priority 1 gaps — the scene cannot be cut without these."""
+        """Priority 1 gaps, the scene cannot be cut without these."""
         return [r for r in self.missing if r.priority == 1]
 
     @property
@@ -119,7 +114,7 @@ def _matches(req: Requirement, take: Take, cast_size: int) -> bool:
     """Does this take satisfy this requirement?
 
     Matching is by framing and how many people are in shot, because that is what
-    an editor is actually looking for. Subject identity is deliberately loose —
+    an editor is actually looking for. Subject identity is deliberately loose , 
     the Vision Agent describes people rather than naming them.
     """
     if req.is_vfx_plate:
@@ -146,7 +141,7 @@ def _matches(req: Requirement, take: Take, cast_size: int) -> bool:
 def _assign(requirements: list[Requirement], takes: list[Take], cast_size: int) -> None:
     """Match takes to requirements, one setup satisfying one requirement.
 
-    Requirements of the same shot type compete for distinct setups — three
+    Requirements of the same shot type compete for distinct setups, three
     singles need three different camera positions, not three takes of one.
     """
     claimed: set[str] = set()
@@ -206,7 +201,7 @@ def connect():
     """A ClickHouse client.
 
     autogenerate_session_id is off deliberately. With a session, the driver
-    refuses concurrent queries on the same client — and a web server will always
+    refuses concurrent queries on the same client, and a web server will always
     end up making them. Without one, each query stands alone and clients are
     safe to share.
     """

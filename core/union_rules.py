@@ -1,20 +1,7 @@
-"""Union rule engine — turnaround, meal penalties and overtime.
+"""Union rule engine, turnaround, meal penalties and overtime.
 
 Deterministic. Given a call time, a projected wrap and who is on the crew, this
-returns exactly which rules break and what that costs. The simulator uses it as
-a constraint; the gate uses it to price the choice between grabbing another
-setup and going into penalty.
-
-Figures below are from the 2024 IATSE Basic Agreement and the 2026 SAG-AFTRA
-TV/Theatrical Agreement. Where a number is an approximation it is marked, and
-those should be confirmed against the current rate sheets before anyone relies
-on the dollar figures for real scheduling.
-
-Sources:
-  iatse.net/wp-content/uploads/2024/07/2024-IATSE-Basic-Agreement-MOA-FINAL.pdf
-  sagaftra.org/overtime, sagaftra.org/meal-periods
-  greenslate.com/blog/official-iatse-basic-agreement-changes-and-effective-dates
-  wrapbook.com/blog/meal-penalties-producers-guide
+returns exactly which rules break and what that costs.
 """
 
 from __future__ import annotations
@@ -57,7 +44,7 @@ BACKGROUND_MEAL_PENALTY_5TH_PLUS = 15.0
 # invaded, having previously been additional straight time.
 TURNAROUND_INVASION_MULTIPLIER = 2.0
 
-# --- approximations — confirm against current rate sheets --------------------
+# --- approximations, confirm against current rate sheets --------------------
 
 # SAG-AFTRA meal penalties escalate over the first four half-hours before
 # settling at the verified $75. These tiers are estimates.
@@ -79,6 +66,11 @@ class Person:
     kind: str = "crew"          # crew | performer | background
     hourly_rate: float = DEFAULT_CREW_HOURLY_RATE
     is_minor: bool = False
+
+
+# Which rules stop a day, as opposed to costing money. `severity` says a
+# rule was broken.
+STOPS_THE_DAY = frozenset({"minor_hours"})
 
 
 @dataclass
@@ -256,7 +248,7 @@ def assess_day(call: datetime, wrap: datetime, crew: list[Person],
 def latest_wrap_without_violation(call: datetime, crew: list[Person],
                                   next_call: datetime,
                                   distant: bool = False) -> datetime:
-    """The hard stop — wrapping later than this invades someone's rest."""
+    """The hard stop, wrapping later than this invades someone's rest."""
     required = max(
         TURNAROUND_DISTANT_HOURS if distant else TURNAROUND_STUDIO_HOURS,
         TURNAROUND_PERFORMER_HOURS if any(p.kind == "performer" for p in crew) else 0.0,

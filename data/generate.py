@@ -2,16 +2,7 @@
 
 A studio does not shoot one continuous thousand-day film. It shoots a slate:
 features of 30-60 days and series seasons of 60-80, spread over several years,
-drawing on the same recurring pool of DPs and crew. That recurrence is the point
-— it is why the Historian can say anything useful about a DP on a night exterior.
-
-Setup durations are drawn from distributions conditioned on interior/exterior,
-day/night, extras count and which DP is shooting.
-
-Seeded, so runs are reproducible.
-
-    python data/generate.py --productions 18
-    python data/generate.py --productions 24 --truncate
+drawing on the same recurring pool of DPs and crew.
 """
 
 import argparse
@@ -66,15 +57,6 @@ SCENE_TYPE_WEIGHTS = [0.55, 0.20, 0.08, 0.12, 0.05]
 # Industry reference figures behind the distributions below.
 #   Features shoot 3-5 script pages/day; TV drama 7-8; low-budget 4-6.
 #   A dialogue two-hander in one room runs 7-8 setups.
-#   Shooting ratio: 5:1-20:1 features, 20:1-40:1 action,
-#     30:1-50:1 for take-heavy directors.
-#   ~3 takes per setup corresponds to a 12:1 ratio.
-#   Standard shooting day is 12 hours under IATSE.
-#   A feature shoots 30-60 days; a TV episode about 8.
-# Sources: wolfcrow.com/how-to-schedule-a-film-20-ways-to-cut-time,
-#   toolsforfilm.com/blog/shooting-ratio-explained,
-#   vashivisuals.com/shooting-ratios-of-feature-films,
-#   filmustage.com/blog/scheduling-for-tv-vs-film-whats-the-difference
 
 BASE_MINUTES = {
     "dialogue": 32,
@@ -136,7 +118,7 @@ def build_slate(rng, n_productions, first_start):
     for i in range(n_productions):
         kind = rng.choices(["feature", "series"], [0.6, 0.4])[0]
         days = rng.randint(32, 58) if kind == "feature" else rng.randint(56, 80)
-        # productions overlap — a studio runs several at once
+        # productions overlap, a studio runs several at once
         cursor = cursor + timedelta(days=rng.randint(18, 70))
         slate.append({
             "production_id": f"prod_{i + 1:02d}",

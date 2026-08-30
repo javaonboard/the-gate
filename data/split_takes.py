@@ -1,15 +1,7 @@
 """Split a film into shots and treat each shot as a take.
 
 Every cut in a finished film is a different camera angle, which is exactly what
-the coverage matrix cares about. This detects shot boundaries, cuts each one to
-its own file using the camera roll / clip naming a DIT would use, and writes a
-manifest for the ingest step.
-
-Clips are downscaled to 720p — Gemini downsamples video anyway, and smaller
-files upload far faster.
-
-    python data/split_takes.py --input ../footage/ToS-4k-1920.mov
-    python data/split_takes.py --input ../footage/ToS-4k-1920.mov --start 120 --end 420
+the coverage matrix cares about.
 """
 
 import argparse
@@ -26,12 +18,8 @@ SHOWINFO_PTS = re.compile(r"pts_time:([0-9.]+)")
 # lower, which is why one fixed number does not work.
 DEFAULT_THRESHOLD = 0.12
 
-# If the average shot comes out longer than this, the detector is missing cuts
-# and the threshold comes down. Measured on real footage: a 22-minute piece
-# gave 24 cuts and a 53s average at 0.12, which is right, while dropping to
-# 0.06 gave 121 "cuts" with a one-second median — noise, not shots. Anything
-# genuinely long is handled by MAX_SHOT_SECONDS instead of by chasing it with
-# the threshold.
+# If the average shot comes out longer than this, the detector is missing
+# cuts and the threshold comes down.
 PLAUSIBLE_MEAN_SHOT = 75.0
 
 # Below this a detection is a flash, a flicker or a compression artefact
@@ -46,7 +34,7 @@ MAX_SHOT_SECONDS = 150.0
 def detect_cuts(path, threshold=DEFAULT_THRESHOLD, start=0.0, end=0.0):
     """Shot-boundary timestamps, in seconds, on the source timeline.
 
-    Detection runs over the whole file with no seeking — trimming the input
+    Detection runs over the whole file with no seeking, trimming the input
     shifts the reported pts_time and makes the offsets wrong.
     """
     cmd = [
@@ -66,11 +54,9 @@ def detect_cuts(path, threshold=DEFAULT_THRESHOLD, start=0.0, end=0.0):
 def find_shots(path, duration, threshold=DEFAULT_THRESHOLD, on_step=None):
     """Work out where the shots are, lowering the bar until it looks sane.
 
-    A first pass at the usual threshold suits edited footage. When the result
-    implies improbably long shots — raw camera takes, a dark scene, gradual
-    transitions — the threshold comes down and it tries again. Anything still
-    too long at the end is divided on length, because an unsplit twenty-minute
-    block helps nobody.
+A first pass at the usual threshold suits edited footage. When the result
+    implies improbably long shots, raw camera takes, a dark scene, gradual
+    transitions, the threshold comes down and it tries again.
     """
     cuts: list[float] = []
 

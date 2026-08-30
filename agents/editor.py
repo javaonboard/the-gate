@@ -1,19 +1,8 @@
-"""The Editor — where does one shot end and the next begin?
+"""The Editor, where does one shot end and the next begin?
 
 A threshold cannot answer this. Frame-difference detection asks "did the
 picture change a lot" and calls that a cut, which works on edited drama and
-fails on everything else. Measured on two real files: a threshold tuned for one
-found five shots in the other's twenty-two minutes, one of them seventeen
-minutes long.
-
-So the same split as everywhere else in this system — ffmpeg proposes, the
-model decides. ffmpeg is fast and free and finds the obvious hard cuts. Gemini
-actually watches the footage and says where a shot genuinely changes, including
-the ones no threshold sees: a dissolve, a whip pan, a cut between two dark
-frames, the moment a slate leaves frame and the take begins.
-
-Long files are handled in windows, because a model asked about twenty minutes
-at once loses track of the clock.
+fails on everything else.
 """
 
 from __future__ import annotations
@@ -29,6 +18,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from agents import gemini
+
 from agents.resilience import retry
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -41,6 +32,9 @@ WINDOW_SECONDS = 300.0
 
 # Small enough to send quickly, large enough to see a cut.
 PREVIEW_HEIGHT = 360
+
+# The tail of a file rarely divides evenly into windows, and what is left over
+MIN_WINDOW_SECONDS = 2.0
 
 # Two boundaries closer than this are the same boundary, seen twice.
 SAME_BOUNDARY = 1.2
@@ -85,24 +79,7 @@ PROMPT = """Watch this clip and say where each separate shot begins.
 
 A new shot is any point where the footage stops being one continuous piece of
 camera work:
-
-- a hard cut to another angle or another place
-- a dissolve or fade between two shots
-- the camera stopping and restarting — common in raw footage, where several
-  takes sit in one file
-- a clapperboard appearing, which marks the head of a take
-- a whip pan or a cut hidden in movement
-
-Not a new shot:
-- the camera panning, tilting, tracking or zooming within one continuous take
-- someone walking in or out of frame
-- the lighting changing during a take
-- a subject moving closer to the lens
-
-Give the time in seconds from the start of THIS clip. The first shot starts
-at 0. Be precise about the timings — they are used to cut the file.
-
-If the whole clip is one continuous shot, return a single entry starting at 0."""
+"""
 
 
 def duration_of(path: Path) -> float:
@@ -141,13 +118,13 @@ def watch_window(client: genai.Client, path: Path, start: float,
         client.models.generate_content,
         model=MODEL,
         contents=[types.Part.from_bytes(data=clip, mime_type="video/mp4"), PROMPT],
-        config=types.GenerateContentConfig(
+        config=gemini.config(
             temperature=0,
             response_mime_type="application/json",
             response_schema=SHOTS_SCHEMA,
         ),
     )
-    shots = json.loads(response.text).get("shots", [])
+    shots = json.loads(gemini.text_of(response)).get("shots", [])
 
     # timestamps come back relative to the window
     for shot in shots:
@@ -159,8 +136,8 @@ def find_shots(client: genai.Client, path: Path, candidates: list[float] | None 
                on_step=None) -> list[dict[str, Any]]:
     """Every shot in the file, as the model sees it.
 
-    candidates are ffmpeg's proposals. They are not passed to the model —
-    telling it where to look would only make it agree — but they are merged
+    candidates are ffmpeg's proposals. They are not passed to the model , 
+    telling it where to look would only make it agree, but they are merged
     afterwards, so an obvious hard cut is never lost because the model was
     looking elsewhere.
     """
@@ -170,12 +147,19 @@ def find_shots(client: genai.Client, path: Path, candidates: list[float] | None 
 
     shots: list[dict[str, Any]] = []
     start = 0.0
-    while start < total:
+    while total - start >= MIN_WINDOW_SECONDS:
         length = min(WINDOW_SECONDS, total - start)
         if on_step:
             on_step(start, total)
         shots.extend(watch_window(client, path, start, length))
         start += length
+
+    # A file shorter than one window is still footage. Reporting "no shots
+    # found" because the loop never ran would be a wrong answer given quietly.
+    if not shots and total > 0:
+        if on_step:
+            on_step(0.0, total)
+        shots.extend(watch_window(client, path, 0.0, total))
 
     # ffmpeg's hard cuts, for anything the model passed over
     for t in candidates or []:
@@ -237,7 +221,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     src = Path(args.input)
-    client = genai.Client()
+    client = gemini.client()
 
     candidates: list[float] = []
     if args.compare:

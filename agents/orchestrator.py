@@ -1,21 +1,12 @@
-"""The Gate — the production desk.
+"""The Gate, the production desk.
 
 Runs the crew and puts the call together.
-
-The shape matters. Facts that have a correct answer are computed in Python and
-handed to the agents as evidence: coverage, the odds, what a penalty costs. The
-agents decide what to look at, read what comes back, and say what it means. No
-agent is ever asked to produce a number that could be calculated.
-
-Three ways in, all landing here:
-  a setup finishes          — new footage on the card
-  the clock ticks           — Cloud Scheduler
-  the world changes         — a Parallel Monitor webhook
-"""
+  """
 
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -23,7 +14,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from agents import historian, scout
+from agents import compliance, historian, scout
 from agents.resilience import is_transient
 from api.events import Run, adk_callbacks, step
 from core.coverage import connect
@@ -54,36 +45,24 @@ class Trigger:
 
 INSTRUCTION = """You are the production desk on a film set. The 1st AD is
 standing in front of you and the crew is waiting to move the camera.
-
-You will be given evidence that has already been worked out:
-- what the scene needs and what is on the card
-- the odds of making the day, from ten thousand simulations
-- what each missing shot costs to grab now against what it costs to come back for
-- anything the scout found happening outside
-
-Your job is to give the call, in the fewest words that could change what they do.
-
-Rules:
-- Lead with GO or NO-GO. Never bury it.
-- If something is missing, say what, and give both prices. That comparison is
-  the whole decision.
-- Use the numbers you were given. Never produce one of your own — if you find
-  yourself estimating, you are doing the wrong job.
-- Speak like a person on a set, not a report. "You're short a single on Marcus.
-  Grab it — two grand tonight against thirty for a pickup day."
-- If everything is covered and the day holds, say so in one line and stop.
-- Refer to people by name. Lind, not dp_lind.
-
-You may call the crew for anything the evidence does not cover. The scout knows
-what is happening outside. The book knows what this crew has done before."""
+"""
 
 
-def demo_crew() -> list[Person]:
-    return (
-        [Person(f"camera_{i:02d}", "camera") for i in range(18)]
-        + [Person(f"cast_{i}", "cast", kind="performer", hourly_rate=180.0)
-           for i in range(3)]
-    )
+def crew_for(client, scene_id: str) -> list[Person]:
+    """Who is on the clock for the day this scene belongs to.
+
+    Every penalty is a headcount times a rate, so this is the multiplier on the
+    whole money axis. It used to be eighteen camera and three cast written into
+    the source, which made the figures right for one kind of production and
+    wrong for every other.
+    """
+    from core.crew import people_of
+
+    where = client.query(
+        f"SELECT production_id FROM {DB}.scenes WHERE scene_id = %(s)s LIMIT 1",
+        parameters={"s": scene_id},
+    ).result_rows
+    return people_of(where[0][0] if where else "")
 
 
 def build_agent(run: Run | None = None, with_mcp: bool = True):
@@ -112,30 +91,54 @@ def gather_evidence(client, scene_id: str, now: datetime, call: datetime,
                     trials: int = 10_000) -> GateReport:
     """Everything with a correct answer, computed before any agent speaks."""
 
-    with step(run, "vision", "Reading the day's takes") as s:
-        takes = client.query(
-            f"SELECT count() FROM {DB}.take_analysis WHERE scene_id = %(s)s",
-            parameters={"s": scene_id},
-        ).result_rows[0][0]
-        s.result(f"{takes} takes logged so far", {"takes": takes})
+    # Four questions that do not depend on each other: what is on the
+    # card, what the scene needs, what is happening outside, and how long
+    # this crew takes.
+    def count_takes():
+        with step(run, "vision", "Reading the day's takes") as s:
+            n = client.query(
+                f"SELECT count() FROM {DB}.take_analysis WHERE scene_id = %(s)s",
+                parameters={"s": scene_id},
+            ).result_rows[0][0]
+            s.result(f"{n} takes logged so far", {"takes": n})
+            return n
 
-    with step(run, "script", "Working out what this scene needs") as s:
-        reqs = client.query(
-            f"SELECT count() FROM {DB}.scene_requirements WHERE scene_id = %(s)s",
-            parameters={"s": scene_id},
-        ).result_rows[0][0]
-        s.result(f"{reqs} shots the editor will need", {"requirements": reqs})
+    def count_requirements():
+        with step(run, "script", "Working out what this scene needs") as s:
+            n = client.query(
+                f"SELECT count() FROM {DB}.scene_requirements WHERE scene_id = %(s)s",
+                parameters={"s": scene_id},
+            ).result_rows[0][0]
+            s.result(f"{n} shots the editor will need", {"requirements": n})
+            return n
 
-    all_setups = pending_setups(client, scene_id)
-    done = {s.setup_id for s in all_setups[: (len(all_setups) * 2) // 3]}
-    remaining = [s for s in all_setups if s.setup_id not in done]
+    def look_outside():
+        """Whether the street is closed does not depend on a model asking."""
+        with step(run, "scout", "Checking what is happening at the location") as s:
+            s.tool("parallel.search", "Closures, permits and events near the set")
+            try:
+                where = client.query(
+                    f"SELECT location_id FROM {DB}.scenes "
+                    f"WHERE scene_id = %(s)s LIMIT 1",
+                    parameters={"s": scene_id},
+                ).result_rows
+                outside = scout.conditions_at(
+                    client, where[0][0] if where else "location",
+                    now.date().isoformat())
+                s.result(outside["summary"][:160], outside)
+            except Exception as exc:
+                # The world not answering is not a reason to withhold the call.
+                s.result(f"Could not reach the outside world "
+                         f"({type(exc).__name__})", {"error": True})
 
-    with step(run, "historian", "Looking up how long this crew usually takes") as s:
-        s.tool("clickhouse.run_query", "Reading four years of setup times")
-        if remaining:
-            first = remaining[0]
+    def ask_the_book(setup):
+        with step(run, "historian",
+                  "Looking up how long this crew usually takes") as s:
+            s.tool("clickhouse.run_query", "Reading four years of setup times")
+            if setup is None:
+                return
             past = historian.how_long_does_this_take(
-                first.dp_id, first.int_ext, first.day_night, first.scene_type)
+                setup.dp_id, setup.int_ext, setup.day_night, setup.scene_type)
             s.result(
                 f"{past['typical_minutes']} min typical, "
                 f"{past.get('slow_day_minutes', '?')} on a slow day "
@@ -143,15 +146,36 @@ def gather_evidence(client, scene_id: str, now: datetime, call: datetime,
                 past,
             )
 
+    all_setups = pending_setups(client, scene_id)
+    done = {s.setup_id for s in all_setups[: (len(all_setups) * 2) // 3]}
+    remaining = [s for s in all_setups if s.setup_id not in done]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        waiting = [
+            pool.submit(count_takes),
+            pool.submit(count_requirements),
+            pool.submit(look_outside),
+            pool.submit(ask_the_book, remaining[0] if remaining else None),
+        ]
+        for job in waiting:
+            job.result()
+
+    crew = crew_for(client, scene_id)
+
     with step(run, "simulator", f"Running {trials:,} versions of the rest of the day"):
         report = build_report(
-            client, scene_id, now=now, call=call, crew=demo_crew(),
+            client, scene_id, now=now, call=call, crew=crew,
             next_call=next_call, completed_setup_ids=done, trials=trials,
         )
 
     with step(run, "compliance", "Checking rest, meals and overtime") as s:
-        s.result(f"Latest clean wrap {report.baseline.hard_stop:%H:%M}",
-                 {"hard_stop": report.baseline.hard_stop.isoformat()})
+        s.tool("union_rules.assess_day", "Meals, turnaround, overtime, minors")
+        cost = report.compliance.total_cost_usd if report.compliance else 0
+        s.result(f"Latest clean wrap {report.baseline.hard_stop:%H:%M}", {
+            "hard_stop": report.baseline.hard_stop.isoformat(),
+            "cost_usd": round(cost),
+            "stops_the_day": [v.rule for v in report.blocked_by_rule],
+        })
 
     with step(run, "planner", "Pricing what is missing") as s:
         s.result(report.summary(), {"options": len(report.options)})
@@ -163,13 +187,22 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
     """The computed facts, written out for the agent to reason over."""
     b = report.baseline
     lines = [
+        # The verdict first, and stated as settled.
+        f"THE CALL IS {report.verdict}. This is already decided. Report it.",
+        "",
         f"Trigger: {trigger.headline}. {trigger.detail}".strip(),
         f"Scene {report.scene_id} at {report.now:%H:%M}.",
         "",
-        f"Coverage: {report.coverage.completeness:.0%} — "
-        f"{report.coverage.summary['have']} of "
-        f"{report.coverage.summary['required']} shots across "
-        f"{report.coverage.people} people on camera.",
+        (f"Coverage: {report.coverage.completeness:.0%} — "
+         f"{report.coverage.summary['have']} of "
+         f"{report.coverage.summary['required']} shots across "
+         f"{report.coverage.people} people on camera."
+         if report.coverage.judged else
+         "Coverage: NOT JUDGED. Nobody has said what this scene needs — there "
+         "are no people identified on camera and no shots asked of the scene "
+         "itself. Say exactly that. Do not say it is covered, do not say it is "
+         "fine, and do not imply the crew can move on. Tell them to say what "
+         "the scene needs."),
         f"Odds of making the day: {b.p_make_the_day:.0%} over {b.trials:,} runs.",
         f"Hard stop {b.hard_stop:%H:%M}. Likely wrap {b.median_wrap:%H:%M}, "
         f"{b.p90_wrap:%H:%M} on a slow finish.",
@@ -187,8 +220,20 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
                 f"saving ${o.saving_usd:,.0f}. "
                 f"Odds fall to {o.p_make_day_after:.0%} if shot."
             )
+    elif report.coverage.missing():
+        # Missing, but with nothing left on the schedule to hang a
+        # recovery option on.
+        lines += ["", "Missing, and no setup left today to fold them into:"]
+        for m in sorted(report.coverage.missing(),
+                        key=lambda m: -m.recover_cost_usd):
+            lines.append(f"- {m.describe}: ${m.recover_cost_usd:,} to come back for.")
     else:
         lines += ["", "Nothing missing."]
+
+    if report.blocked_by_rule:
+        lines += ["", "Stops the day:"]
+        for v in report.blocked_by_rule:
+            lines.append(f"- {v.rule}: {v.detail}")
 
     return "\n".join(lines)
 
@@ -203,12 +248,35 @@ async def run_gate(scene_id: str, now: datetime, call: datetime,
 
     # Off the event loop. The queries and the simulation block, and if they run
     # on the loop nothing reaches the browser until the whole call is finished
-    # — the crew appears to do a day's work in a single instant.
+    #, the crew appears to do a day's work in a single instant.
     report = await asyncio.to_thread(
         gather_evidence, client, scene_id, now, call, next_call, run
     )
     brief = evidence_brief(report, trigger)
     spoken = report.summary()
+
+    if use_agent and (report.blocked_by_rule
+                      or (report.compliance
+                          and report.compliance.total_cost_usd > 0)):
+        # Only when something is actually wrong. A clean day needs no
+        # explaining, and you do not call the steward over to be told nothing
+        # is the matter.
+        with step(run, "compliance", "Asking the steward what this costs") as s:
+            s.tool("check_the_rules", "Forced: the rules run before he speaks")
+            try:
+                said = await asyncio.to_thread(
+                    compliance.explain,
+                    call.strftime("%Y-%m-%d %H:%M"),
+                    report.baseline.median_wrap.strftime("%Y-%m-%d %H:%M"),
+                    next_call.strftime("%Y-%m-%d %H:%M"),
+                    crew_size=max((v.people for v in
+                                   (report.compliance.violations
+                                    if report.compliance else [])), default=0),
+                )
+                s.result(said["said"] or "Rules checked.", said["facts"])
+            except Exception as exc:
+                s.result(f"Steward unavailable ({type(exc).__name__}), "
+                         f"the computed figures stand")
 
     if use_agent:
         try:
@@ -243,7 +311,7 @@ async def run_gate(scene_id: str, now: datetime, call: datetime,
                 reason = ("the model connection dropped" if is_transient(exc)
                           else f"{type(exc).__name__}")
                 run.publish("orchestrator", "working",
-                            f"Reporting the computed call — {reason}")
+                            f"Reporting the computed call, {reason}")
 
     return {"report": report, "spoken": spoken, "brief": brief}
 

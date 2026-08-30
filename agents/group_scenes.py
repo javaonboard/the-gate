@@ -1,61 +1,19 @@
-"""Group analysed takes into scenes.
+"""Group analysed takes into scenes, over a whole analysis file.
 
-The Vision Agent sees each take alone, so it has no way to reuse wording — the
-same canal appears as 'canal street', 'city canal street' and 'canal waterfront'.
-This pass shows Gemini every label at once and asks it to merge them into a small
-canonical set, then rewrites the analysis with a canonical_location on each take.
-
-    python agents/group_scenes.py
+The merge itself lives in agents/locations.py, because the upload path needs
+the same judgment as soon as footage lands.
 """
 
 import argparse
 import json
-import os
 from collections import defaultdict
 from pathlib import Path
 
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+
+from agents.locations import merge_labels
 
 load_dotenv()
-
-MODEL = os.environ.get("GEMINI_MODEL_PRO", "gemini-3.7-flash")
-
-RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "mapping": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "label": {"type": "string"},
-                    "canonical": {"type": "string"},
-                },
-                "required": ["label", "canonical"],
-            },
-        }
-    },
-    "required": ["mapping"],
-}
-
-PROMPT = """These are location labels written by someone logging shots from one
-film, one shot at a time. Because each shot was described in isolation, the same
-physical location has been given many different names.
-
-Merge them into a small canonical set of distinct filming locations. Aim for
-roughly 8 to 15 locations for a feature short.
-
-Rules:
-- Labels describing the same physical place must map to one canonical name.
-- Use a short lowercase canonical name, e.g. 'canal street', 'control room'.
-- Interior and exterior of the same building are different locations.
-- Do not invent locations that no label refers to.
-- Every input label must appear exactly once in the mapping.
-
-Labels:
-"""
 
 
 def main():
@@ -67,26 +25,12 @@ def main():
     takes = json.loads(path.read_text())
     labels = sorted({t["location_label"] for t in takes})
 
-    client = genai.Client()
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=PROMPT + "\n".join(f"- {lab}" for lab in labels),
-        config=types.GenerateContentConfig(
-            temperature=0,
-            response_mime_type="application/json",
-            response_schema=RESPONSE_SCHEMA,
-        ),
-    )
-
-    mapping = {m["label"]: m["canonical"] for m in json.loads(response.text)["mapping"]}
-    missing = [lab for lab in labels if lab not in mapping]
-    if missing:
-        print(f"warning: {len(missing)} labels unmapped, keeping originals")
-        for lab in missing:
-            mapping[lab] = lab
+    seconds = sum(t.get("duration_seconds", 0) for t in takes)
+    mapping = merge_labels(labels, shots=len(takes), minutes=seconds / 60)
 
     for t in takes:
-        t["canonical_location"] = mapping[t["location_label"]]
+        label = t["location_label"].strip().lower()
+        t["canonical_location"] = mapping.get(label, label)
 
     path.write_text(json.dumps(takes, indent=2))
 

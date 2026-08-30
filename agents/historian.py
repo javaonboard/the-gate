@@ -1,13 +1,8 @@
-"""The Book — production records.
+"""The Book, production records.
 
 Every studio has one person who has been there long enough to say "that will
 take you until seven." This is that, built from eighteen productions and four
 years of setups.
-
-It reaches ClickHouse two ways. Typed tools answer the questions we know get
-asked, quickly and in a shape the rest of the system can use. The MCP connection
-is there for everything else — when someone asks a question nobody anticipated,
-the agent writes the SQL itself against the live cluster.
 """
 
 from __future__ import annotations
@@ -29,7 +24,7 @@ _local = threading.local()
 
 
 def client():
-    """One client per thread — the tools get called from a thread pool."""
+    """One client per thread, the tools get called from a thread pool."""
     existing = getattr(_local, "client", None)
     if existing is None:
         existing = connect()
@@ -43,16 +38,9 @@ def how_long_does_this_take(dp_id: str, interior_exterior: str, time_of_day: str
                             scene_type: str = "", extras: int = 0) -> dict[str, Any]:
     """How long this DP has historically taken on this kind of setup.
 
-    Returns the spread, not an average — the tail is what makes days overrun.
+Returns the spread, not an average, the tail is what makes days overrun.
     If we have too few observations to be honest about, it widens the question
     and says so.
-
-    Args:
-        dp_id: Which DP, e.g. "dp_lind".
-        interior_exterior: "INT" or "EXT".
-        time_of_day: "DAY", "NIGHT", "DUSK" or "DAWN".
-        scene_type: "dialogue", "action", "stunt", "vfx" or "montage". Optional.
-        extras: Roughly how many background performers.
     """
     bucket = 0 if extras == 0 else 1 if extras <= 5 else 2 if extras <= 20 else 3 if extras <= 50 else 4
 
@@ -152,13 +140,9 @@ def how_much_coverage_do_we_usually_get(scene_type: str = "dialogue") -> dict[st
 def what_was_happening_then(location_id: str, at_time: str) -> list[dict[str, Any]]:
     """What the world was doing at a moment, nearest event before it.
 
-    Uses ClickHouse ASOF JOIN, which matches on the closest earlier timestamp
-    rather than an exact one — the right tool for lining shooting up against
+Uses ClickHouse ASOF JOIN, which matches on the closest earlier timestamp
+    rather than an exact one, the right tool for lining shooting up against
     weather and closures.
-
-    Args:
-        location_id: The location, e.g. "canal_street".
-        at_time: Timestamp, "YYYY-MM-DD HH:MM:SS".
     """
     rows = client().query(
         f"""
@@ -187,49 +171,23 @@ TOOLS = [
 # --- the agent --------------------------------------------------------------
 
 INSTRUCTION = """You keep the production records for a studio. You have watched
-eighteen productions over four years — every setup, every take, who was shooting
+eighteen productions over four years, every setup, every take, who was shooting
 and how long it took.
 
 Answer from the records, never from impression. Use the tools.
-
-How to answer:
-- Give the typical time and the slow-day time, not a single number. A shoot day
-  is ruined by the tail, not the average.
-- Always say how many setups the answer is based on. If it is thin, say so
-  plainly rather than sounding confident.
-- Refer to people by name, not by id — dp_lind is Lind.
-- Keep it to a couple of sentences unless asked for the breakdown.
-
-If a question needs data the typed tools do not cover, query the cluster
-directly through the ClickHouse tools and explain what you looked at.
-
-The tables you can reach are curated views, not the raw record:
-  scene_status     one row per scene — where, how much shot, who is in it
-  take_log         every take, with its framing, focus and any problems
-  dp_pace          how long each DP takes, by conditions
-  person_coverage  which framings exist of which person, per scene
-  world_log        what was happening outside, with sources
-
-They are read-only and capped. Prefer them over clever SQL — they already
-carry the definitions everyone else in the system uses."""
+"""
 
 
-# ClickHouse Cloud hosts a managed MCP server. It is the richer of the two —
-# thirteen read-only tools covering queries, schemas, services and billing —
-# but it authenticates by OAuth 2.0 with a browser sign-in and offers no
-# headless option, so it cannot be used by an agent running on Cloud Run.
-#
-# The self-hosted server takes a bearer token and runs anywhere. Both are the
-# official ClickHouse MCP server; they differ only in who operates them.
+# ClickHouse Cloud hosts a managed MCP server.
 MANAGED_MCP_URL = "https://mcp.clickhouse.cloud/mcp"
 
 
 def mcp_toolset(mode: str | None = None):
     """The ClickHouse MCP connection, managed or self-hosted.
 
-    mode: "managed" for ClickHouse Cloud's hosted server (OAuth, interactive —
+    mode: "managed" for ClickHouse Cloud's hosted server (OAuth, interactive , 
     use locally and for the demo), "local" for the self-hosted server (bearer
-    token, works unattended — use when deployed). Defaults to CLICKHOUSE_MCP_MODE.
+    token, works unattended, use when deployed). Defaults to CLICKHOUSE_MCP_MODE.
     """
     from google.adk.tools.mcp_tool import McpToolset
     from google.adk.tools.mcp_tool.mcp_session_manager import (

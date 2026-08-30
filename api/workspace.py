@@ -1,14 +1,8 @@
 """One shoot day each.
 
-Several people can have the interface open at once — judges, in our case — and
+Several people can have the interface open at once, judges, in our case, and
 they must not shoot into each other's day. Every visitor gets a workspace,
 identified by a cookie, and every row they create is stamped with it.
-
-The seeded demo lives in its own workspace and is shared, read-only. The moment
-a visitor changes anything, their workspace is forked from it: they get their
-own copy of the scenes, the cast and the takes, and can rename, re-tick and
-upload without touching anyone else. Nobody starts at an empty screen, and
-nobody stands on anyone.
 """
 
 from __future__ import annotations
@@ -16,7 +10,7 @@ from __future__ import annotations
 import os
 import uuid
 
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response
 
 DB = os.environ.get("CLICKHOUSE_DATABASE", "the_gate")
 
@@ -66,20 +60,34 @@ def new_workspace_id() -> str:
 
 
 def workspace_id(request: Request, response: Response | None = None) -> str:
-    """This visitor's workspace.
+    """The workspace this browser chose.
 
-    Minting happens once, in middleware, so that several requests arriving
-    together all belong to the same workspace. Handlers only read it.
+    Nothing is minted here. A workspace is only created when someone asks for
+    one, which is what stopped several requests arriving together from each
+    landing somewhere different. Until a choice is made, reads fall back to the
+    demo and writes are refused.
     """
-    existing = request.cookies.get(COOKIE)
-    if existing and existing.startswith("ws_"):
-        return existing
+    chosen = request.cookies.get(COOKIE, "")
+    if chosen.startswith("ws_") or chosen == DEMO:
+        return chosen
+    return DEMO
 
-    decided = getattr(getattr(request, "state", None), "workspace", None)
-    if decided:
-        return decided
 
-    return new_workspace_id()
+def writable(request: Request, response: Response | None = None) -> str:
+    """The workspace to write into, or an error saying why not.
+
+    The demo is shared, every visitor sees the same film in it, so changing
+    it would change what everyone else sees. The chooser offers a copy of it
+    for anyone who wants to work on it.
+    """
+    mine = workspace_id(request, response)
+    if mine == DEMO:
+        raise HTTPException(
+            status_code=409,
+            detail="The demo is read-only. Start your own day, or take a copy "
+                   "of the demo, to make changes.",
+        )
+    return mine
 
 
 def has_own_copy(ch, workspace: str) -> bool:
@@ -101,20 +109,33 @@ def scene_for(ch, workspace: str, scene_id: str) -> str:
 def character_for(ch, workspace: str, character_id: str) -> str:
     """Translate a demo character id into this workspace's copy of it.
 
-    A visitor reads the shared demo, then changes something — by which point
-    their fork exists and holds the same person under a different id. Without
-    this, their edit lands on nothing.
+Taking a copy of the demo rewrites every character id to
+    `{workspace}_{original}`, so an edit made while reading the demo has to be
+    pointed at the copy.
     """
     if character_id.startswith(workspace):
         return character_id
-    if has_own_copy(ch, workspace):
-        return f"{workspace}_{character_id}"
+
+    copied = f"{workspace}_{character_id}"
+    found = ch.query(
+        f"SELECT character_id FROM {DB}.characters "
+        f"WHERE production_id = %(w)s AND character_id IN (%(a)s, %(b)s)",
+        parameters={"w": workspace, "a": copied, "b": character_id},
+    ).result_rows
+    ids = {r[0] for r in found}
+    if copied in ids:
+        return copied
     return character_id
 
 
 def read_from(ch, workspace: str) -> str:
-    """Which production to read: theirs once forked, the demo until then."""
-    return workspace if has_own_copy(ch, workspace) else DEMO
+    """Which production to read. Always the one that was chosen.
+
+    This used to fall back to the demo when a workspace looked empty, which is
+    how a day started from nothing filled up with someone else's film. An empty
+    day now reads as empty, because that is what it is.
+    """
+    return workspace
 
 
 def fork(ch, workspace: str) -> bool:
@@ -123,7 +144,7 @@ def fork(ch, workspace: str) -> bool:
     Called before the first change they make. Scene, setup and character ids
     are all rewritten into their workspace, so two people editing "scene 1" or
     renaming the same face are touching different rows. face_uri is left
-    pointing at the original crop — the images are read-only and shared.
+    pointing at the original crop, the images are read-only and shared.
     """
     if has_own_copy(ch, workspace):
         return False

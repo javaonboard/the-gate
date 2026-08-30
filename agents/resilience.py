@@ -2,13 +2,7 @@
 
 Sending video to a model means large request bodies and long-lived streams, and
 those get cut. Connections reset, payloads arrive short, the service returns a
-503 while it moves something around. None of it means the request was wrong, and
-all of it looks like a crash if nothing catches it.
-
-Anything that only fails transiently is retried with a widening gap. Anything
-that indicates the request itself was bad — a rejected argument, a permission
-problem — is raised immediately, because retrying that just wastes time and
-money.
+503 while it moves something around.
 """
 
 from __future__ import annotations
@@ -93,7 +87,7 @@ async def retry_async(fn: Callable[..., Any], *args: Any, attempts: int = 3,
                       base_delay: float = 1.5,
                       on_retry: Callable[[int, BaseException], None] | None = None,
                       **kwargs: Any) -> Any:
-    """The same, for the async paths — the ADK runner among them."""
+    """The same, for the async paths, the ADK runner among them."""
     import asyncio
 
     last: BaseException | None = None

@@ -1,19 +1,8 @@
-"""Scout — the Location Scout.
+"""Scout, the Location Scout.
 
 Watches the world outside the fence. A shoot day is not disturbed by anything
 inside the schedule; it is disturbed by a pulled permit, a street closure, an
 unexpected event two roads away, or rain arriving at four.
-
-None of that lives in a database. It lives on the open web, it changes without
-warning, and nobody thinks to ask about it until it has already cost a day.
-
-Three ways of working, in increasing weight:
-  search   — a quick fact, right now
-  research — a cited, structured briefing on a location and date
-  watch    — a standing subscription; Parallel pushes to us when things change
-
-The last one is the important one. It is what stops this being a thing you have
-to remember to ask.
 """
 
 from __future__ import annotations
@@ -21,13 +10,15 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from dotenv import load_dotenv
 from parallel import Parallel
 
 load_dotenv()
+
+DB = os.environ.get("CLICKHOUSE_DATABASE", "the_gate")
 
 # Standing subscriptions we want for any location we are shooting at.
 # Each becomes a Parallel monitor that webhooks us when something changes.
@@ -131,12 +122,8 @@ def _client() -> Parallel:
 def search_web(objective: str, query: str) -> dict[str, Any]:
     """Look something up on the live web, right now.
 
-    Use for a single fact that may have changed recently — a rate, a rule, a
+Use for a single fact that may have changed recently, a rate, a rule, a
     closure. Returns short excerpts with their source URLs.
-
-    Args:
-        objective: What you are trying to find out, in a sentence.
-        query: The search phrase.
     """
     result = _client().search(objective=objective, search_queries=[query])
     return {
@@ -156,14 +143,8 @@ def research_location(location: str, city: str, on_date: str,
                       processor: str = "base") -> dict[str, Any]:
     """Build a cited briefing on a location for a shooting date.
 
-    Covers sunset, weather, permits, road closures and local events. Every field
+Covers sunset, weather, permits, road closures and local events. Every field
     comes back with its sources, so the call can be checked rather than trusted.
-
-    Args:
-        location: Where we are shooting, e.g. "canal street".
-        city: The city, e.g. "Amsterdam".
-        on_date: ISO date of the shoot day.
-        processor: Parallel tier. "base" is enough for this; "core" digs deeper.
     """
     client = _client()
     task = client.task_run.create(
@@ -208,15 +189,9 @@ def watch_location(location: str, city: str, webhook_url: str,
                    kinds: list[str] | None = None) -> dict[str, Any]:
     """Subscribe to changes at a location.
 
-    Creates standing Parallel monitors. From then on Parallel pushes to our
-    webhook when a permit, closure, event or union bulletin changes — we do not
+Creates standing Parallel monitors. From then on Parallel pushes to our
+    webhook when a permit, closure, event or union bulletin changes, we do not
     poll and we do not have to remember to look.
-
-    Args:
-        location: Where we are shooting.
-        city: The city.
-        webhook_url: Public URL that will receive monitor events.
-        kinds: Which watches to set up. Defaults to all of them.
     """
     client = _client()
     wanted = set(kinds) if kinds else {w["kind"] for w in WATCHLIST}
@@ -252,21 +227,7 @@ shooting today.
 
 Your job is to know what is happening outside the set that could cost the
 production time or money, and to say it plainly.
-
-How to work:
-- Use research_location for a full briefing on the shooting location and date.
-- Use search_web for a single fact you need to confirm right now.
-- Use watch_location to set up standing watches on a location we will return to.
-
-When you report:
-- Lead with anything that changes what the crew should do in the next few hours.
-- Say how confident you are, and cite where it came from.
-- Weather matters because of light and because exteriors slow down. Closures and
-  events matter because they move the company or add noise. Permit changes matter
-  because they can stop the day entirely.
-- If nothing is wrong, say so in one line. Do not pad.
-
-Never guess a fact you could look up. Never present a forecast as certainty."""
+"""
 
 
 def build_agent(callbacks: dict | None = None):
@@ -308,3 +269,58 @@ if __name__ == "__main__":
         print(f"\n{len(out['citations'])} citations:")
         for c in out["citations"][:8]:
             print(f"  {c['field']:20s} {c['url']}")
+
+
+# --- what is happening outside, every time, not when a model decides to ------
+
+CONDITIONS_KIND = "local_conditions"
+
+# Long enough to cover a shoot day including a night unit, short enough that
+# a closure announced this morning is not missed.
+STILL_GOOD_HOURS = 14
+
+
+def conditions_at(ch, location_id: str, on_date: str, city: str = "Amsterdam"
+                  ) -> dict[str, Any]:
+    """Ask the live web what is happening at this location today.
+
+Called on every gate check rather than offered as a tool the model may or
+    may not reach for.
+    """
+    seen = ch.query(
+        f"""
+        SELECT summary, citation_url FROM {DB}.world_events
+        WHERE location_id = %(l)s AND kind = %(k)s
+          AND ts > now() - INTERVAL {STILL_GOOD_HOURS} HOUR
+        ORDER BY ts DESC LIMIT 1
+        """,
+        parameters={"l": location_id, "k": CONDITIONS_KIND},
+    ).result_rows
+    if seen:
+        return {"summary": seen[0][0], "citation_url": seen[0][1],
+                "looked_up": False}
+
+    place = location_id.replace("_", " ")
+    found = search_web(
+        objective=f"Anything that would disrupt filming at {place} in {city} "
+                  f"on {on_date} — road closures, permits, events, protests.",
+        query=f"{place} {city} road closure OR street event OR filming permit "
+              f"{on_date}",
+    )
+
+    results = found.get("results", [])
+    if not results:
+        summary, url = "Nothing found affecting the location today.", ""
+    else:
+        summary = "; ".join(r["title"] for r in results[:3])[:400]
+        url = results[0]["url"]
+
+    ch.insert("world_events", [[
+        location_id, datetime.now(), "parallel_search", CONDITIONS_KIND,
+        1, summary, url, found.get("search_id", ""),
+        json.dumps(results)[:8000],
+    ]], column_names=["location_id", "ts", "source", "kind", "severity",
+                      "summary", "citation_url", "monitor_id", "payload"])
+
+    return {"summary": summary, "citation_url": url, "looked_up": True,
+            "search_id": found.get("search_id", ""), "results": len(results)}

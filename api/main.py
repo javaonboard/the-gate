@@ -1,10 +1,8 @@
-"""THE GATE — backend.
+"""THE GATE, backend.
 
 Serves the gate call to the interface, streams live crew activity over SSE, and
 receives Parallel Monitor webhooks so the world can interrupt the shoot day.
-
-    uvicorn api.main:app --reload --port 8080
-"""
+    """
 
 from __future__ import annotations
 
@@ -21,11 +19,16 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agents.orchestrator import Trigger, run_gate
-from api.casting_routes import router as casting_router
+from api.footage import router as footage_router
+from api.people import router as people_router
+from api.production import router as production_router
+from api.scenes import router as scenes_router
+from api.workspaces_routes import router as workspaces_router, workspace_label
 from api import workspace as ws
 from api.events import bus, sse
 from api.labels import AGENTS, GLOSSARY, MOVEMENTS, SHOT_SIZES, person_label
@@ -50,41 +53,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def attach_workspace(request: Request, call_next):
-    """Give every visitor one workspace, and only one.
-
-    Routes used to mint an id whenever a request arrived without a cookie. The
-    interface opens half a dozen requests at once on load, so each got its own
-    workspace and the last Set-Cookie won — which made a reset look like it had
-    failed, because the next request belonged to a different workspace that had
-    never been cleared.
-    """
-    existing = request.cookies.get(ws.COOKIE)
-    minted = None
-    if not existing or not existing.startswith("ws_"):
-        minted = ws.new_workspace_id()
-        # so handlers in this request see it too
-        request.scope.setdefault("state", {})
-        request.state.workspace = minted
-
-    response = await call_next(request)
-
-    if minted:
-        response.set_cookie(
-            ws.COOKIE, minted, max_age=ws.COOKIE_MAX_AGE,
-            httponly=True, samesite="lax",
-        )
-    return response
-
-
 @app.get("/api/session")
 def session(request: Request):
-    """Settle the workspace before the interface asks for anything else."""
-    return {"workspace": ws.workspace_id(request)}
+    """Which workspace this browser is in, if any.
+
+    Nothing is assigned automatically. Until someone chooses, this returns
+    null and the interface asks.
+    """
+    chosen = request.cookies.get(ws.COOKIE, "")
+    if not chosen:
+        return {"workspace": None}
+
+    # the day may have been deleted since this browser last looked
+    label = workspace_label(chosen)
+    if label is None:
+        return {"workspace": None}
+
+    return {"workspace": chosen, "is_demo": chosen == ws.DEMO, "label": label}
 
 
-app.include_router(casting_router)
+app.include_router(workspaces_router)
+app.include_router(production_router)
+app.include_router(scenes_router)
+app.include_router(people_router)
+app.include_router(footage_router)
 
 # Cropped faces, served straight to the interface.
 FACES_DIR = Path(__file__).resolve().parent / "static" / "faces"
@@ -106,14 +98,6 @@ def client():
         existing = connect()
         _local.client = existing
     return existing
-
-
-def demo_crew() -> list[Person]:
-    return (
-        [Person(f"camera_{i:02d}", "camera") for i in range(18)]
-        + [Person(f"cast_{i}", "cast", kind="performer", hourly_rate=180.0)
-           for i in range(3)]
-    )
 
 
 # --- the call ---------------------------------------------------------------
@@ -171,7 +155,7 @@ async def gate(scene_id: str = DEFAULT_SCENE, hours_in: float = 9.0,
     """Run the crew and wait for the call. Kept for scripts and curl.
 
     Set use_agent=false to skip the language models and return the computed call
-    alone — useful when demonstrating the numbers do not depend on them.
+    alone, useful when demonstrating the numbers do not depend on them.
     """
     run = bus.start(scene_id)
     await _do_gate(run, scene_id, hours_in, use_agent, trigger)
@@ -368,156 +352,22 @@ def scene_takes(scene_id: str):
     ]
 
 
-# --- the library ------------------------------------------------------------
-
-@app.get("/api/library/dps")
-def dps():
-    """Every DP, with how much we have watched them work."""
-    rows = client().query(
-        f"""
-        SELECT dp_id,
-               countMerge(n) AS setups,
-               round(quantilesTDigestMerge(0.5)(durations)[1] / 60) AS median_min,
-               round(quantilesTDigestMerge(0.9)(durations)[1] / 60) AS p90_min
-        FROM {DB}.setup_duration_stats
-        GROUP BY dp_id ORDER BY setups DESC
-        """
-    ).result_rows
-    return [
-        {**person_label(r[0]), "setups": r[1],
-         "median_minutes": r[2], "p90_minutes": r[3]}
-        for r in rows
-    ]
-
-
-@app.get("/api/library/dps/{dp_id}")
-def dp_detail(dp_id: str):
-    """One DP, broken down by the conditions they were shooting in."""
-    rows = client().query(
-        f"""
-        SELECT int_ext, day_night, scene_type, extras_bucket,
-               countMerge(n) AS setups,
-               round(quantilesTDigestMerge(0.5)(durations)[1] / 60) AS median_min,
-               round(quantilesTDigestMerge(0.9)(durations)[1] / 60) AS p90_min
-        FROM {DB}.setup_duration_stats
-        WHERE dp_id = %(dp)s
-        GROUP BY int_ext, day_night, scene_type, extras_bucket
-        HAVING setups > 0
-        ORDER BY setups DESC
-        """,
-        parameters={"dp": dp_id},
-    ).result_rows
-
-    productions = client().query(
-        f"""
-        SELECT p.title, p.kind, count() AS setups
-        FROM {DB}.setups AS s
-        INNER JOIN {DB}.productions AS p USING (production_id)
-        WHERE s.dp_id = %(dp)s
-        GROUP BY p.title, p.kind ORDER BY setups DESC
-        """,
-        parameters={"dp": dp_id},
-    ).result_rows
-
-    return {
-        **person_label(dp_id),
-        "conditions": [
-            {"interior_exterior": r[0], "time_of_day": r[1], "scene_type": r[2],
-             "extras_bucket": r[3], "setups": r[4],
-             "median_minutes": r[5], "p90_minutes": r[6]}
-            for r in rows
-        ],
-        "productions": [
-            {"title": r[0], "kind": r[1], "setups": r[2]} for r in productions
-        ],
-    }
-
-
-@app.get("/api/library/productions")
-def productions():
-    rows = client().query(
-        f"""
-        SELECT production_id, title, kind, start_date, end_date,
-               shoot_days, primary_dp
-        FROM {DB}.productions ORDER BY start_date
-        """
-    ).result_rows
-    return [
-        {"production_id": r[0], "title": r[1], "kind": r[2],
-         "start_date": str(r[3]), "end_date": str(r[4]), "shoot_days": r[5],
-         "dp": person_label(r[6])}
-        for r in rows
-    ]
-
-
-# --- the outside world ------------------------------------------------------
-
-@app.post("/api/webhooks/parallel")
-async def parallel_webhook(request: Request, background: BackgroundTasks):
-    """Parallel Monitor pushes here when something changes at the location.
-
-    This is what stops the system being a thing you have to ask. A pulled
-    permit or incoming rain arrives on its own and the day is reassessed.
-    """
-    payload = await request.json()
-    data = payload.get("data", {})
-
-    run = bus.latest()
-    if run:
-        run.publish("scout", "tool_result",
-                    f"Change detected: {payload.get('type', 'event')}",
-                    {"monitor_id": data.get("monitor_id")})
-
-    client().insert(
-        "world_events",
-        [[
-            os.environ.get("DEMO_LOCATION_ID", "canal_street"),
-            datetime.utcnow(),
-            "parallel_monitor",
-            data.get("kind", "unknown"),
-            int(data.get("severity", 3)),
-            str(payload.get("summary", ""))[:500],
-            str(data.get("citation_url", "")),
-            str(data.get("monitor_id", "")),
-            json.dumps(payload)[:4000],
-        ]],
-        column_names=["location_id", "ts", "source", "kind", "severity",
-                      "summary", "citation_url", "monitor_id", "payload"],
-    )
-
-    background.add_task(gate, DEFAULT_SCENE)
-    return {"received": True}
-
-
-@app.get("/api/world")
-def world(location_id: str = "canal_street", limit: int = 20):
-    rows = client().query(
-        f"""
-        SELECT ts, source, kind, severity, summary, citation_url
-        FROM {DB}.world_events
-        WHERE location_id = %(l)s ORDER BY ts DESC LIMIT %(n)s
-        """,
-        parameters={"l": location_id, "n": limit},
-    ).result_rows
-    return [
-        {"ts": r[0].isoformat(), "source": r[1], "kind": r[2],
-         "severity": r[3], "summary": r[4], "citation_url": r[5]}
-        for r in rows
-    ]
-
-
-# --- reference --------------------------------------------------------------
-
-@app.get("/api/glossary")
-def glossary():
-    return {"terms": GLOSSARY, "shot_sizes": SHOT_SIZES, "movements": MOVEMENTS}
-
-
-@app.get("/api/crew")
-def crew():
-    return [{"key": k, **v} for k, v in AGENTS.items()]
-
-
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+# --- the interface
+# ---------------------------------------------------------- In
+# development Vite serves this and proxies /api here.
+
+WEB = Path(__file__).resolve().parents[1] / "web" / "dist"
+
+if WEB.is_dir():
+    @app.get("/{path:path}", include_in_schema=False)
+    def interface(path: str):
+        """The built interface, and index.html for anything it routes itself."""
+        asked = (WEB / path).resolve()
+        if path and asked.is_file() and WEB in asked.parents:
+            return FileResponse(asked)
+        return FileResponse(WEB / "index.html")

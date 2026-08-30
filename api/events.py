@@ -1,10 +1,8 @@
 """Live activity bus.
 
 Every agent and every deterministic step publishes what it is doing. The
-interface subscribes over Server-Sent Events and shows a status rail — which
+interface subscribes over Server-Sent Events and shows a status rail, which
 member of the crew is working, on what, and what came back.
-
-Deliberately not a chat. It is a production status board.
 """
 
 from __future__ import annotations

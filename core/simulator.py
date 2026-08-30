@@ -1,12 +1,8 @@
-"""Day Simulator — will we make the day?
+"""Day Simulator, will we make the day?
 
 Monte Carlo over the setups still to shoot. Each trial draws a duration for
 every remaining setup from what this crew has actually done before, adds them
 up, and asks the union rule engine what the resulting wrap time costs.
-
-Not a language model. The distributions come from ClickHouse and the arithmetic
-is numpy, so the same inputs always give the same answer — which matters when
-the number is going to move a shoot day.
 """
 
 from __future__ import annotations
@@ -74,7 +70,7 @@ class SimulationResult:
 
     @property
     def p_make_the_day(self) -> float:
-        # Compare in epoch seconds — wrap_times were built from naive local
+        # Compare in epoch seconds, wrap_times were built from naive local
         # datetimes, so a datetime64 comparison would apply a UTC offset.
         hard = np.int64(self.hard_stop.timestamp())
         as_int = self.wrap_times.astype("datetime64[s]").astype("int64")

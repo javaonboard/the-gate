@@ -1,31 +1,9 @@
-"""Continuity — will these takes cut together?
+"""Continuity, will these takes cut together?
 
 Every other check looks at one take alone. This one cannot: a prop has not
 moved unless it was somewhere else a moment ago, and a coat is only unbuttoned
 if it was buttoned in the wide. The error only exists in the comparison.
-
-This is the script supervisor's actual job, and the one thing on a set that
-genuinely requires holding several takes in mind at once. It is why they carry
-a camera and a notebook and photograph everything before anyone moves.
-
-What it looks for, in the order it costs money:
-
-  screen direction   two people in a conversation both facing the same way.
-                     The 180-degree line. Cut those together and the audience
-                     believes they are talking to someone else entirely.
-
-  prop position      a glass, a letter, a chair — somewhere else between takes.
-
-  wardrobe           a jacket open in one angle and closed in the other, a tie
-                     pulled down, sleeves rolled.
-
-  physical state     a drink half gone, a cigarette shorter, blood, sweat, rain.
-
-  hair and makeup    parted differently, tied back, ruined by a stunt.
-
-  light              the sun moved. Very common on a long exterior day and
-                     impossible to fix.
-"""
+                     """
 
 from __future__ import annotations
 
@@ -42,6 +20,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from agents import gemini
+
 from agents.resilience import retry
 from core.coverage import connect
 
@@ -51,7 +31,7 @@ DB = os.environ.get("CLICKHOUSE_DATABASE", "the_gate")
 MODEL = os.environ.get("GEMINI_MODEL_PRO",
                        os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.7-flash"))
 
-# Comparing every take against every other is quadratic and mostly pointless —
+# Comparing every take against every other is quadratic and mostly pointless , 
 # what matters is whether the angles cut together, so one frame per camera
 # position is enough.
 MAX_POSITIONS = 8
@@ -98,40 +78,10 @@ SCHEMA = {
 PROMPT = """These frames are different camera positions on the same scene, shot
 over an afternoon. They will be cut together.
 
-Your job is to find anything that stops them cutting — a detail that is one way
+Your job is to find anything that stops them cutting, a detail that is one way
 in one angle and another way in the next. The audience will not name it, but
 they will feel it.
-
-Compare them against each other, looking for:
-
-1. SCREEN DIRECTION. In a conversation, each person should look across the
-   frame toward the other — one looking left, one looking right. If both look
-   the same way, the camera crossed the line and they will appear not to be
-   talking to each other. This is the most expensive error here.
-
-2. PROPS. A glass, a bottle, a letter, a chair, a bag — in a different place,
-   or gone, or newly present.
-
-3. WARDROBE. A jacket open in one angle and closed in another. A tie. Sleeves.
-   A scarf. Buttons.
-
-4. PHYSICAL STATE. How much is left in a glass. Whether someone is wet, dirty,
-   bleeding, out of breath. A cigarette's length.
-
-5. HAIR AND MAKEUP. Parted differently, tied back in one angle and loose in
-   another.
-
-6. LIGHT. The sun somewhere else, shadows in another direction, one angle much
-   warmer than the rest. Common on a long exterior and unfixable afterwards.
-
-Rules:
-- Name both states: "the glass is full in A but half empty in D" — not "glass
-  continuity issue".
-- Say which two shots disagree, using the labels given.
-- blocking means an editor genuinely could not cut these together.
-- Different framings of the same moment are not a mismatch. Neither is the
-  camera being closer. Judge the world in front of the lens, not the lens.
-- If they cut together, say so and return an empty list. Most do."""
+"""
 
 
 def grab_frame(video: Path, at: float) -> bytes | None:
@@ -187,13 +137,13 @@ def compare_scene(client: genai.Client, ch, scene_id: str, clips: Path
         client.models.generate_content,
         model=MODEL,
         contents=parts,
-        config=types.GenerateContentConfig(
+        config=gemini.config(
             temperature=0,
             response_mime_type="application/json",
             response_schema=SCHEMA,
         ),
     )
-    result = json.loads(response.text)
+    result = json.loads(gemini.text_of(response))
     result["compared"] = labels
     return result
 
@@ -224,7 +174,7 @@ person who will notice that the glass was full in the wide and half empty in
 the close.
 
 Report what will not cut, name both states, and say which angles disagree.
-Screen direction first — it is the one that cannot be worked around."""
+Screen direction first, it is the one that cannot be worked around."""
 
 
 def build_agent(callbacks: dict | None = None):
@@ -248,7 +198,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     ch = connect()
-    gclient = genai.Client()
+    gclient = gemini.client()
     clips = Path(args.clips)
 
     scenes = (
@@ -268,7 +218,7 @@ if __name__ == "__main__":
         try:
             result = compare_scene(gclient, ch, scene_id, clips)
         except Exception as exc:
-            print(f"{scene_id}  failed — {type(exc).__name__}")
+            print(f"{scene_id}  failed: {type(exc).__name__}")
             continue
 
         if result is None:

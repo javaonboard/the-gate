@@ -1,28 +1,8 @@
-"""QC — what would stop this take being used.
+"""QC, what would stop this take being used.
 
 In 2019 a scene of Game of Thrones went out with a takeaway coffee cup sitting
 on the table. Nobody on the day saw it, nobody in post saw it, and by the time
-the internet saw it the episode had aired. It cost the production nothing to
-fix on the floor and could not be fixed at all afterwards.
-
-That is the job here: look at each take for the things that make footage
-unusable, and say so while the camera is still set up.
-
-Three levels, because they lead to different decisions:
-
-  blocking   the take cannot be used — a crew member in shot, a modern object
-             in a period scene, the subject out of focus. Another take is needed
-             and the gate does not count this one as coverage.
-
-  warning    usable but flawed — a boom shadow, focus drifting at the end, a
-             continuity detail that may not match. Worth one more take if there
-             is time.
-
-  note       an observation an editor might want. Nothing to do on the day.
-
-Blocking problems feed straight into the coverage matrix: a take with one does
-not satisfy a requirement, so a scene can be short on coverage even with the
-footage apparently in the can.
+the internet saw it the episode had aired.
 """
 
 from __future__ import annotations
@@ -38,6 +18,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from agents import gemini
+
 from agents.resilience import retry
 from core.coverage import connect
 
@@ -50,7 +32,7 @@ MODEL = os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.7-flash")
 # and sound own the technical faults, production design owns whether the world
 # is right, and the script supervisor owns whether it will cut together.
 CATEGORIES = {
-    # technical — camera and sound
+    # technical, camera and sound
     "crew_or_equipment": "someone or something from the crew is in shot",
     "boom_shadow": "a microphone shadow on a wall or a face",
     "reflection": "the camera or crew reflected in glass or a mirror",
@@ -59,12 +41,12 @@ CATEGORIES = {
     "artefact": "flicker, rolling shutter, banding, a dead pixel",
     "framing": "badly composed, cut off, or obstructed",
 
-    # the world — production design
+    # the world, production design
     "anachronism": "something that did not exist in this period",
     "wrong_place": "something that does not belong in this setting",
     "modern_branding": "present-day logos, packaging or signage",
 
-    # will it cut — script supervisor
+    # will it cut, script supervisor
     "continuity": "a detail that will not match the other takes",
     "screen_direction": "facing the wrong way to cut with the others",
     "performance": "a fluffed line, a look to camera, a broken moment",
@@ -117,48 +99,7 @@ def build_prompt(period: str, setting: str, notes: str = "") -> str:
     extra = f"Also: {notes}" if notes else ""
     return f"""You are checking a take before the camera moves on. Find anything
 that would stop an editor using it.
-
-THE WORLD THIS IS SET IN
-Period:  {period or "present day"}
-Setting: {setting or "a contemporary setting"}
-{extra}
-
-Anything visible that could not exist in that world is a problem, however small
-and however far into the background. This is the most valuable thing you can
-find: it costs nothing to fix while the camera is still up, and cannot be fixed
-once the set is struck.
-
-Work through three passes.
-
-1. IS ANYTHING FROM THE CREW VISIBLE?
-   A person, a light stand, a boom, a cable, sandbags, tape marks on the floor,
-   a shadow cast by a microphone, the camera or an operator reflected in glass,
-   a mirror, a window, a car door, someone's glasses.
-
-2. DOES EVERY OBJECT BELONG IN THIS WORLD?
-   Go across the frame object by object, including the background and the very
-   edges. A disposable coffee cup, a plastic bottle, a wristwatch, trainers, a
-   zip, a phone, a wheelie bin, a parked car, road markings, an aerial, a
-   satellite dish, a modern shopfront, a printed logo, a light switch, a power
-   socket. Ask of each one: could this exist in this period and this place?
-   Say exactly what it is and exactly where, so someone can walk over and move
-   it.
-
-3. IS IT TECHNICALLY USABLE?
-   Is the intended subject genuinely sharp. Is the exposure recoverable. Any
-   flicker, banding or rolling shutter. Is anyone cut off badly or obstructed.
-   Is anyone looking down the lens.
-
-Rules:
-- blocking means the take genuinely cannot be used: a crew member in shot, an
-  object that could not exist, the subject out of focus.
-- warning means usable, but worth another take if there is time.
-- Do not invent problems. Most takes are clean, and a clean take must come back
-  with an empty list and usable = true. A false alarm costs a take nobody needed.
-- Judge only what you can actually see.
-
-Be specific. "A white paper cup on the table, left of the actress" is useful.
-"Possible continuity issue" is worthless."""
+"""
 
 
 WORLD_SCHEMA = {
@@ -189,23 +130,14 @@ world it is set in.
 
 Judge from what is actually visible: architecture, clothing, vehicles,
 technology, signage, lighting. A production designer chose all of it.
-
-Give:
-- the period, as specifically as the frames support
-- the setting, in a few words
-- one sentence on what would look out of place — the things a props or wardrobe
-  department would have to keep out of shot
-
-Be careful with science fiction: futuristic technology in a present-day street
-means near-future, not the far future. If the frames genuinely do not say, use
-"present day" and a low confidence."""
+"""
 
 
 def infer_world(client: genai.Client, frames: list[bytes]) -> dict[str, Any]:
     """Work out the period and setting from the footage itself.
 
     Nobody should have to type this in. The frames already say what world the
-    production is in — that is the production designer's whole job.
+    production is in, that is the production designer's whole job.
     """
     parts: list[Any] = [
         types.Part.from_bytes(data=f, mime_type="image/png") for f in frames
@@ -216,19 +148,19 @@ def infer_world(client: genai.Client, frames: list[bytes]) -> dict[str, Any]:
         client.models.generate_content,
         model=MODEL,
         contents=parts,
-        config=types.GenerateContentConfig(
+        config=gemini.config(
             temperature=0,
             response_mime_type="application/json",
             response_schema=WORLD_SCHEMA,
         ),
     )
-    return json.loads(response.text)
+    return json.loads(gemini.text_of(response))
 
 
 def world_of(ch, production_id: str) -> tuple[str, str, str]:
     """The period and setting this production is meant to be in.
 
-    Without it there is no such thing as an anachronism — a coffee cup is only
+    Without it there is no such thing as an anachronism, a coffee cup is only
     wrong because the scene is medieval.
     """
     rows = ch.query(
@@ -249,13 +181,13 @@ def check_take(client: genai.Client, path: Path, period: str = "",
             types.Part.from_bytes(data=path.read_bytes(), mime_type="video/mp4"),
             build_prompt(period, setting, notes),
         ],
-        config=types.GenerateContentConfig(
+        config=gemini.config(
             temperature=0,
             response_mime_type="application/json",
             response_schema=QC_SCHEMA,
         ),
     )
-    result = json.loads(response.text)
+    result = json.loads(gemini.text_of(response))
     result["model_id"] = MODEL
     return result
 
@@ -300,14 +232,7 @@ INSTRUCTION = """You check footage before the crew moves on.
 You are looking for the thing nobody noticed. A coffee cup on a medieval table,
 a crew member reflected in a window, a boom dipping into frame. These cost
 nothing to fix while the camera is still up and cannot be fixed afterwards.
-
-When you report:
-- Lead with whether the take is usable.
-- Say exactly what and exactly where, so someone can go and look.
-- Separate what blocks the take from what merely bothers you.
-- If it is clean, say so in a few words. Do not manufacture concerns.
-
-You are the last person to see this before it goes."""
+"""
 
 
 def build_agent(callbacks: dict | None = None):
@@ -333,7 +258,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     ch = connect()
-    gclient = genai.Client()
+    gclient = gemini.client()
 
     rows = ch.query(
         f"""
