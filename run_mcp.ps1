@@ -22,5 +22,14 @@ $env:CLICKHOUSE_ALLOW_WRITE_ACCESS   = "false"
 $env:CLICKHOUSE_ALLOW_DROP           = "false"
 $env:CLICKHOUSE_MCP_QUERY_TIMEOUT    = "30"
 
+# Run the venv's own copy rather than whatever is on PATH, so this works from
+# a plain shell without activating anything first.
+$server = Join-Path $PSScriptRoot ".venv\Scripts\mcp-clickhouse.exe"
+if (-not (Test-Path $server)) {
+  Write-Error "mcp-clickhouse not found at $server - run: uv pip install -r requirements.txt"
+  exit 1
+}
+
 Write-Host "MCP -> $env:CLICKHOUSE_DATABASE as $env:CLICKHOUSE_USER (read-only)"
-mcp-clickhouse
+Write-Host "      http://localhost:8000/mcp   health: /health"
+& $server
