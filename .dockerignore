@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
+# footage is never in the image; it is mounted or fetched
+../footage/
+api/static/faces/*.png
+
+.git/
+tests/
+notes/
+*.md
+!README.md

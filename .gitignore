@@ -34,3 +34,11 @@ out/
 # os
 Thumbs.db
 .DS_Store
+
+web/dist/
+# face crops are generated from whatever footage was taken in
+api/static/faces/*.png
+*.tsbuildinfo
+# footage lives beside this repo, never inside it
+footage/
+.claude/

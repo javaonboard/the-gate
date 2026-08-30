@@ -1,129 +1,227 @@
 # THE GATE
 
-### Check the gate.
-
-Autonomous shoot-day operations for a film production in progress.
+Shoot-day operations for a film crew. Drop a day's footage in and it tells you
+whether you can move on.
 
 ---
 
 ## The problem
 
-The most expensive mistake in production is wrapping a setup you can't get back.
+Before a film crew moves the camera, someone says **"check the gate."** It is
+the last moment you can still get the shot.
 
-You find out weeks later, in the edit. There's no clean single on the second half of the scene. The window comp has no clean plate. By then the set is struck, the actor is on another job, and the location is thirty thousand dollars a day to re-rent. What should have been another twenty minutes on the floor becomes a pickup day.
+If something is missing you find out weeks later, in the edit. By then the set
+is struck, the actor is on another job, and the location costs thirty thousand
+dollars a day to rent again. Twenty more minutes on the floor becomes a pickup
+day.
 
-Every one of those mistakes is made in the same five-second window — the moment the 1st AD calls *"check the gate,"* and the company moves on.
+At the same time the 1st AD is watching the clock — sunset, meal penalties,
+turnaround, overtime. A day of shooting costs between fifty thousand and half a
+million dollars.
 
-At the same time, that AD is carrying a second problem in their head: the clock. Sunset. Twelve-hour turnaround. A meal penalty every six hours. Minors' hours. Weather. A day of principal photography costs between fifty thousand and half a million dollars, and the person deciding whether to push for one more setup is doing it on instinct and a wristwatch.
+Neither question means anything alone. Being short only matters against the
+time you have left. The time left only matters against what is still missing.
 
-THE GATE holds both of those at once, and — this is the part that matters — it holds them *together*.
-
-Missing coverage only matters relative to the time you have left. Time only matters relative to what you're still missing. Ask either question alone and you get an answer that sounds reasonable and costs you money. Ask them together and you get something an AD can actually act on:
-
-> *You have 22 minutes before turnaround and three shots missing. Grab the Marcus single and the clean plate — skip the insert, it can be shot anywhere. In that order it saves $47,000.*
-
----
-
-## Why this isn't a chatbot
-
-A conversational assistant can talk about your shoot. It can't run one.
-
-| What the job needs | Why chat can't do it |
-|---|---|
-| Know how long *this* crew takes to light a night interior | No memory of your production — this needs millions of rows of your own history |
-| React when rain arrives at 2pm | Nothing can push information *to* a chat window; it only answers when asked |
-| Say *how likely* you are to make the day | Requires simulation over real distributions, not an opinion |
-| Tell the crew, where the crew already looks | Needs write access to the systems a production actually runs on |
-| Stay awake for a twelve-hour day | There is no event loop in a conversation |
-
-THE GATE is built as a system, not a prompt. The numbers come from computation over real data. The reasoning sits on top.
+THE GATE answers both together.
 
 ---
 
 ## What it does
 
-**Check the gate — the coverage side.** As proxies come off the camera card, Gemini reads the slate to identify scene, setup and take, then analyses the footage: shot size, camera movement, who's in frame, eyeline, focus, whether the take completed. It works out from the script what an editor will actually need to cut the scene, tracks what's been captured against that, checks the continuity geometry, and confirms the VFX plates are there. Then it makes a call — go or no-go — with anything missing ranked by what it will cost to get later.
+**Drop a film in.** It cuts the file into shots, works out what each one is,
+who is in it, and what would stop it being used. Nobody types a scene number, a
+take number or a character name.
 
-**Make the day — the clock side.** A Monte Carlo simulation runs the remaining scenes ten thousand times, drawing setup durations from what this crew has actually done before, conditioned on live weather and light, and constrained by a union rule engine that knows about turnaround and meal penalties. It returns a probability, an expected overtime cost, and re-orderings that don't break continuity.
+**Ask for the call.** It works out what each scene still needs, runs ten
+thousand simulations of the rest of the day, checks the union rules, and prices
+every missing shot two ways: what it costs to grab now, and what it costs to
+come back for.
 
----
-
-## Where the history comes from
-
-The simulator is only as good as its memory, which raises a fair question: on day one of a shoot, there is no history.
-
-That's true, and it resolves faster than you'd think.
-
-**Day one** runs on the 1st AD's own numbers. Every production already has a schedule with an estimated duration for every setup — that estimate *is* the prior. THE GATE starts there rather than pretending to know better.
-
-**By day three or four**, it has watched this crew work. Real durations replace estimates, and because a feature runs thirty to sixty days and an episode eight, the system is learning from actual performance well inside the first week. It sharpens every day.
-
-**A studio never starts cold at all.** Studios shoot series and slates. Season one teaches season two. The same DPs, gaffers and crews come back. That accumulated memory across productions is the thing an individual AD can hold only in their head and only for the shows they personally worked on — and it's the reason this is a studio product rather than an indie one.
-
----
-
-## Demo data
-
-Two sources, and the distinction is deliberate.
-
-**Today's shoot day is real.** The footage is from [Tears of Steel](https://mango.blender.org/), the Blender Foundation's live-action open movie, released under CC-BY along with all of its original camera negative and VFX plates. Real takes, real coverage, real plate material — analysed by Gemini exactly as the product would in production.
-
-**The history behind it is generated.** You cannot film six weeks of a feature to demonstrate a hackathon project. `data/generate.py` produces a plausible production at realistic scale, with durations shaped by published industry figures — three to five pages a day, seven or eight setups for a dialogue two-hander, around three takes per setup at a 12:1 shooting ratio, twelve-hour days.
-
-The extraction pipeline is real. The past it draws on is simulated, and it says so.
-
----
-
-## Architecture
+Then it says GO or NO-GO.
 
 ```
-Parallel Monitor webhook ─┐
-Cloud Scheduler tick ─────┤
-New footage on the card ──┤
-                          ▼
-              Orchestrator  (ADK on Vertex AI Agent Engine)
-                          │
-  ┌────────────┬──────────┼──────────┬────────────┐
-  ▼            ▼          ▼          ▼            ▼
-Continuity  Historian   Vision     Scout     Compliance
-will it cut ClickHouse  Gemini    Parallel   union rules
-QC, casting  via MCP   per take   Monitor/   turnaround,
-            distributions         Task/      meals, minors
-                                  Search
-                          │
-                          ▼
-            Day Simulator — 10,000 trial Monte Carlo
-                  (numpy, not a language model)
+NO-GO   54% of the day · 7 of 13 shots · $136,000 at risk
+
+close-up of Character A     $548 now    vs   $30,000 later
 ```
 
-**ClickHouse** is the production's memory. Every setup, take, per-second frame and analysis. `quantilesTDigest` builds the duration distributions the simulator samples from; `ASOF JOIN` lines takes up against whatever the world was doing at that moment.
+---
 
-**Parallel** is everything outside the fence. Monitor subscriptions push weather, road closures, permit changes and union bulletins in as they happen. Task API does the cited research, and the citations are shown in the interface rather than buried.
+## Why not a chatbot
 
-**Gemini** reads the slate, watches the footage, and does the reasoning that ties the three together.
+| What the job needs | Why a chat window cannot |
+|---|---|
+| Know how long *this* crew takes on a night interior | No memory of your production |
+| React when rain arrives at 2pm | Nothing can push information to it |
+| Say how likely you are to make the day | Needs simulation over real data, not an opinion |
+| Spot a collar tag that changed between takes | Needs to have watched every take |
+| Stay awake for a twelve-hour day | A conversation has no event loop |
+
+The rule the whole system follows: **computation for facts, models for
+judgment.** Whether a scene is covered and what a delay costs are calculated in
+Python. Models are only asked things a person would answer by looking.
+
+---
+
+## Runtime proof
+
+Every service below is called while the system runs.
+
+### Google Cloud
+
+| What | Where |
+|---|---|
+| Gemini watches each take | [`agents/vision.py`](agents/vision.py) |
+| Gemini finds what makes a take unusable | [`agents/qc.py`](agents/qc.py) |
+| Gemini decides where each shot begins | [`agents/editor.py`](agents/editor.py) |
+| Gemini works out who is in frame | [`agents/casting.py`](agents/casting.py) |
+| Gemini checks two takes will cut together | [`agents/continuity.py`](agents/continuity.py) |
+| `multimodalembedding` for face vectors | [`agents/casting.py`](agents/casting.py) |
+| ADK agent, run on every gate check | [`agents/orchestrator.py`](agents/orchestrator.py) |
+| Forced function calling, so the rules cannot be skipped | [`agents/compliance.py`](agents/compliance.py) |
+
+### ClickHouse
+
+| What | Where |
+|---|---|
+| Official MCP server, read by the agent | [`agents/historian.py`](agents/historian.py) |
+| Direct connection for ingest and coverage | [`core/coverage.py`](core/coverage.py) |
+
+The agent reads only the five curated views in `the_gate_marts`, as a read-only
+user. `SELECT` on a raw table is refused.
+
+### Parallel
+
+| What | Where |
+|---|---|
+| **Search API**, called on every gate check | [`agents/scout.py`](agents/scout.py) |
+| Task API for cited research | [`agents/scout.py`](agents/scout.py) |
+| Monitor API for standing webhooks | [`agents/scout.py`](agents/scout.py) |
+
+The search is not a tool the model may reach for. It runs every time, from
+[`agents/orchestrator.py`](agents/orchestrator.py), and the answer lands in
+`world_events` with its source URL. Whether the street is closed should not
+depend on an agent remembering to look.
+
+### Computed, not generated
+
+| What | Where |
+|---|---|
+| Monte Carlo over the rest of the day | [`core/simulator.py`](core/simulator.py) |
+| Union rules — meals, turnaround, overtime, minors | [`core/union_rules.py`](core/union_rules.py) |
+| Coverage, per person and per scene | [`core/character_coverage.py`](core/character_coverage.py) |
+| The GO / NO-GO itself | [`core/gate.py`](core/gate.py) |
+
+A GO is never returned without the rule check having run.
+
+---
+
+## How it fits together
+
+```
+a film                                          the call
+   │                                               ▲
+   ▼                                               │
+Editor ─ Scripty ─ QC ─ Breakdown ─ Casting    The Gate
+   │        │       │       │          │           │
+   └────────┴───────┴───────┴──────────┘      Scout · Book · Clock · Steward
+                    │                              │
+                ClickHouse ─────────────────────────
+```
+
+Six agents take the footage apart, once, when it arrives. Six more answer the
+question every time the AD asks. Everything lands in ClickHouse.
+
+---
+
+## Running it
+
+Needs Python 3.12, Node 22, ffmpeg, and a `.env` — copy `.env.example`.
+
+```bash
+uv venv && uv pip install -r requirements.txt
+python -m data.schema                 # create the tables
+uvicorn api.main:app --reload --port 8080
+```
+
+```bash
+cd web && npm install && npm run dev
+```
+
+Then open http://localhost:5173.
+
+The ClickHouse MCP server runs separately, as the read-only agent user:
+
+```powershell
+.\run_mcp.ps1
+```
+
+---
+
+## Deploying it
+
+One container: the API serves the built interface, so there is one origin and
+no CORS.
+
+```bash
+gcloud run deploy the-gate \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --min-instances 1 --max-instances 1 \
+  --cpu-boost --no-cpu-throttling \
+  --memory 2Gi --timeout 3600 \
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT,GOOGLE_CLOUD_LOCATION=global,CLICKHOUSE_HOST=$CH_HOST,CLICKHOUSE_DATABASE=the_gate" \
+  --set-secrets "CLICKHOUSE_PASSWORD=clickhouse-password:latest,PARALLEL_API_KEY=parallel-key:latest"
+```
+
+Three flags matter:
+
+- **`--max-instances 1`** — runs in flight are held in memory and streamed to
+  the browser. A second instance would answer with a run it has never heard of.
+- **`--no-cpu-throttling`** — taking a film in continues after the request has
+  returned. Throttled, it stalls.
+- **`--timeout 3600`** — uploads are large.
+
+Then seed the demo day:
+
+```bash
+python -m data.seed_demo --film footage/horror-10min.mp4
+```
+
+**Known limit:** clips and face crops are written to the container's own disk,
+so anything a visitor uploads is lost when the instance restarts. The seeded
+demo survives because it is rebuilt on deploy. Moving both to a bucket is the
+next step.
 
 ---
 
 ## Repository
 
 ```
-the-gate/
-├── agents/     ADK agents
-├── core/       simulator, union rules, coverage, continuity
-├── data/       ClickHouse schema and the production generator
-├── api/        FastAPI — webhook receiver and UI backend
-└── web/        the control room
+agents/     the crew — one file each, plus intake.py, the pipeline
+core/       everything with a correct answer: coverage, rules, simulation
+api/        routes by subject, and the live event stream
+data/       schema, generators, and the demo seed
+web/        the control room
 ```
 
-## Running it
+---
 
-```bash
-uv venv --python 3.12
-uv pip install -r requirements.txt
-cp .env.example .env      # then fill in credentials
-python data/generate.py --days 30
-```
+## Demo footage
+
+The demo day is raw camera-card footage from
+[Cinestudy](https://cinestudy.org) — real slates, several takes of one setup,
+and takes that genuinely cannot be used. A finished film has none of those,
+because everything in it was already chosen.
+
+Footage © Sonnyboo, used with permission for editing projects. #Cinestudy
+
+Footage is never committed. It lives in `footage/`, a sibling of this
+repository, so the mistake is not possible.
+
+---
 
 ## Licence
 
-Apache-2.0.
+Apache 2.0. See [LICENSE](LICENSE).
