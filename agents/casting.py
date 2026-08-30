@@ -36,7 +36,10 @@ MODEL = os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.7-flash")
 EMBED_MODEL = os.environ.get("GEMINI_MODEL_EMBED", "multimodalembedding")
 EMBED_DIMS = 1408
 
-FACES_DIR = Path(__file__).resolve().parents[1] / "api" / "static" / "faces"
+FACES_DIR = Path(os.environ.get(
+    "FACES_DIR",
+    Path(__file__).resolve().parents[1] / "api" / "static" / "faces",
+))
 FACES_DIR.mkdir(parents=True, exist_ok=True)
 
 # multimodalembedding encodes the whole crop, so lighting and background

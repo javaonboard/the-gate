@@ -79,7 +79,10 @@ app.include_router(people_router)
 app.include_router(footage_router)
 
 # Cropped faces, served straight to the interface.
-FACES_DIR = Path(__file__).resolve().parent / "static" / "faces"
+FACES_DIR = Path(os.environ.get(
+    "FACES_DIR",
+    Path(__file__).resolve().parent / "static" / "faces",
+))
 FACES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/faces", StaticFiles(directory=str(FACES_DIR)), name="faces")
 

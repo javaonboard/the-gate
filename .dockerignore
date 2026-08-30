@@ -10,8 +10,8 @@ web/node_modules/
 web/dist/
 *.tsbuildinfo
 
-# footage is never in the image; it is mounted or fetched
-../footage/
+# Footage sits outside the build context, so it was never a candidate; the
+# only thing worth excluding here is the crops, which are generated.
 api/static/faces/*.png
 
 .git/

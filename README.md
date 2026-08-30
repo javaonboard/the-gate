@@ -202,10 +202,27 @@ python -m data.seed_demo --film ..
 ootage\horror-10min.mp4
 ```
 
-**Known limit:** clips and face crops are written to the container's own disk,
-so anything a visitor uploads is lost when the instance restarts. The seeded
-demo survives because it is rebuilt on deploy. Moving both to a bucket is the
-next step.
+### Where the footage lives
+
+The image has no footage in it. Clips and face crops are written while the
+system runs and have to outlive the container, so both are bucket mounts:
+`/footage` and `/faces`. Cloud Run presents a bucket as a directory, so nothing
+in the code changes.
+
+```powershell
+gcloud storage buckets create gs://the-gate-footage --location us-central1
+```
+
+Add to the deploy:
+
+```powershell
+  --add-volume "name=footage,type=cloud-storage,bucket=the-gate-footage" `
+  --add-volume-mount "volume=footage,mount-path=/footage" `
+  --add-volume "name=faces,type=cloud-storage,bucket=the-gate-faces" `
+  --add-volume-mount "volume=faces,mount-path=/faces"
+```
+
+Then seed the demo, which fills both.
 
 ---
 

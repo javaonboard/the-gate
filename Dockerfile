@@ -34,15 +34,18 @@ COPY core/ ./core/
 COPY data/ ./data/
 COPY --from=web /web/dist ./web/dist
 
-# Footage lives outside the source tree so it can never be committed. In the
-# image it sits beside the app; a deployment that needs it to survive a restart
-# should mount a volume or point FOOTAGE_ROOT at a bucket.
-ENV FOOTAGE_ROOT=/footage
-RUN mkdir -p /footage/clips
+# Footage and face crops are not in the image. Both are written at runtime and
+# both have to outlive the container, so /footage and /faces are mount points
+# for a bucket. Empty here, filled by the volume.
+ENV FOOTAGE_ROOT=/footage     FACES_DIR=/faces
+RUN mkdir -p /footage/clips /faces
 
 ENV PYTHONUNBUFFERED=1 \
     PORT=8080
 
 # One worker on purpose. Runs in flight are held in memory and streamed to the
 # browser, so a second worker would answer with a run it has never heard of.
-CMD exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+# JSON form so the runtime does not wrap this in a shell of its own, with an
+# explicit sh because ${PORT} still needs expanding. exec means uvicorn takes
+# the process over, so a stop signal reaches it rather than the shell.
+CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT} --workers 1"]
