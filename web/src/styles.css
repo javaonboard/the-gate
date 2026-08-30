@@ -1,42 +1,80 @@
 /* THE GATE
  *
- * Light, rounded, quiet — the feel of a browser panel rather than a dashboard.
- * Soft greys, one blue, generous corners, shadows instead of hard borders. */
+ * Built on Material 3, because this runs on Google Cloud and a judge should
+ * recognise the language it is speaking.
+ *
+ * Three things carry that more than anything else:
+ *
+ *   Tonal surfaces. M3 separates layers by tinting them toward the primary
+ *   colour rather than by stacking shadows. Every grey here is mixed with the
+ *   blue, which is why the neutrals read as chosen rather than default.
+ *
+ *   The shape scale. 4 / 8 / 12 / 16 / 28, and nothing in between. Buttons and
+ *   chips are fully rounded; dialogs take the largest corner.
+ *
+ *   Roboto, at M3's own type sizes, with the letter-spacing the label styles
+ *   ask for. It is the face the system was drawn around.
+ */
 
 :root {
-  --bg: #f9f9fb;
-  --panel: #ffffff;
-  --panel-2: #f0f0f4;
-  --panel-3: #e0e0e6;
-  --line: #d7d7db;
-  --line-soft: #ebebef;
+  /* --- tonal surfaces: neutral, mixed toward the primary ----------------- */
+  --bg:            #f7f9fc;   /* surface                */
+  --panel:         #ffffff;   /* surface-container-low  */
+  --panel-2:       #eef2f8;   /* surface-container      */
+  --panel-3:       #e3e9f2;   /* surface-container-high */
 
-  --text: #15141a;
-  --muted: #5b5b66;
-  --faint: #8f8f9d;
+  --line:          #c2c7cf;   /* outline-variant        */
+  --line-soft:     #e0e5ec;
 
-  --accent: #0060df;
-  --accent-hover: #0250bb;
-  --accent-wash: #f0f5ff;
+  --text:          #191c20;   /* on-surface             */
+  --muted:         #43474e;   /* on-surface-variant     */
+  --faint:         #73777f;   /* outline                */
 
-  --go: #017a4a;
-  --go-wash: #e3f7ed;
-  --nogo: #c50042;
-  --nogo-wash: #ffe8ee;
-  --warn: #8f4700;
-  --warn-wash: #fff4e0;
+  /* --- primary ------------------------------------------------------------ */
+  --accent:        #0b57d0;   /* Google blue, M3 primary */
+  --accent-hover:  #0842a0;
+  --accent-wash:   #d3e3fd;   /* primary-container       */
 
-  --radius: 12px;
-  --radius-sm: 8px;
-  --radius-xs: 6px;
+  /* --- semantic: the call, and what it costs ------------------------------ */
+  --go:            #146c2e;
+  --go-wash:       #c4eed0;
+  --nogo:          #b3261e;   /* M3 error                */
+  --nogo-wash:     #f9dedc;   /* error-container         */
+  --warn:          #8f4700;
+  --warn-wash:     #ffdfa0;
 
-  --shadow: 0 1px 2px rgba(21, 20, 26, 0.06),
-            0 4px 12px rgba(21, 20, 26, 0.05);
-  --shadow-lift: 0 2px 6px rgba(21, 20, 26, 0.08),
-                 0 8px 24px rgba(21, 20, 26, 0.08);
+  /* --- the M3 shape scale ------------------------------------------------- */
+  --radius:        12px;      /* medium — cards          */
+  --radius-lg:     16px;      /* large  — panels         */
+  --radius-xl:     28px;      /* dialogs                 */
+  --radius-sm:     8px;
+  --radius-xs:     4px;
+  --radius-full:   100px;     /* buttons, chips          */
 
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  /* M3 leans on tone for depth and keeps shadow for the things that actually
+     float, so these stay soft. */
+  --shadow:      0 1px 2px rgba(25, 28, 32, .06), 0 1px 3px 1px rgba(25, 28, 32, .05);
+  --shadow-lift: 0 1px 2px rgba(25, 28, 32, .08), 0 2px 6px 2px rgba(25, 28, 32, .07);
+  --shadow-modal: 0 4px 8px 3px rgba(25, 28, 32, .12), 0 1px 3px rgba(25, 28, 32, .16);
+
+  /* Hover and press are an overlay of the on-colour at 8% and 12%, not a
+     different background. It is what makes M3 components feel like one family. */
+  --state-hover:   rgba(11, 87, 208, .08);
+  --state-press:   rgba(11, 87, 208, .12);
+
+  --mono: "Roboto Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+  --sans: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* --- M3 type scale, the parts this interface uses ---------------------- */
+  --title-lg:  22px;
+  --title-md:  16px;
+  --title-sm:  14px;
+  --body-lg:   16px;
+  --body-md:   14px;
+  --body-sm:   12px;
+  --label-lg:  14px;
+  --label-md:  12px;
+  --label-sm:  11px;
 }
 
 * { box-sizing: border-box; }
@@ -48,7 +86,8 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: var(--body-md);
+  line-height: 20px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -130,19 +169,23 @@ main {
 }
 
 .badge {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  padding: 6px 13px;
-  border-radius: 999px;
+  font-size: var(--label-lg);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
 }
 
 .badge[data-go="true"] { color: var(--go); background: var(--go-wash); }
 .badge[data-go="false"] { color: var(--nogo); background: var(--nogo-wash); }
 
 .topstat { display: flex; flex-direction: column; gap: 1px; }
-.topstat b { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-.topstat small { font-size: 11px; color: var(--faint); }
+.topstat b { font-size: var(--title-lg); font-weight: 400; letter-spacing: 0; }
+.topstat small {
+  font-size: var(--label-md);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
 
 .spoken {
   font-size: 15px;
@@ -590,21 +633,56 @@ main {
 
 .toggle input { accent-color: var(--accent); }
 
+/* M3 buttons are pills. Filled for the one thing you are meant to press,
+   outlined for everything beside it. */
 button.primary {
   background: var(--accent);
   color: #fff;
   border: 0;
-  border-radius: var(--radius-xs);
-  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  padding: 10px 24px;
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--label-lg);
+  font-weight: 500;
+  letter-spacing: 0.006em;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background .15s, box-shadow .15s;
 }
 
-button.primary:hover { background: var(--accent-hover); }
-button.primary:disabled { opacity: 0.45; cursor: default; }
+button.primary:hover { background: var(--accent-hover); box-shadow: var(--shadow); }
+button.primary:active { background: var(--accent-hover); box-shadow: none; }
+button.primary:disabled { opacity: .38; cursor: default; box-shadow: none; }
+
+button.secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--label-lg);
+  font-weight: 500;
+  letter-spacing: 0.006em;
+  padding: 9px 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+
+button.secondary:hover { background: var(--state-hover); }
+button.secondary:active { background: var(--state-press); }
+button.secondary:disabled { opacity: .38; cursor: default; }
+
+button.primary.small,
+button.secondary.small {
+  font-size: var(--label-md);
+  padding: 6px 16px;
+}
+
+/* Focus is visible, and it is the same everywhere. */
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .empty { color: var(--faint); font-size: 13.5px; padding: 30px 0; }
 
@@ -977,3 +1055,1159 @@ button.linky {
 }
 
 .badge[data-unjudged="true"] { color: var(--muted); background: var(--panel-2); }
+
+/* --- choosing a shoot day ------------------------------------------------ */
+
+.choose { max-width: 620px; margin: 8px auto; }
+
+.choose h1 {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.choose-lead {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 22px;
+  line-height: 1.5;
+}
+
+.choose h2 {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 650;
+  margin: 26px 0 10px;
+}
+
+.choose-new {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.choose-new input {
+  flex: 1;
+  min-width: 200px;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.choose-new input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+button.ghost {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+.choose-list { display: flex; flex-direction: column; gap: 8px; }
+
+.choose-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.choose-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+.choose-card.demo { border-style: dashed; }
+
+.choose-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.choose-body b { font-size: 14.5px; font-weight: 600; }
+.choose-body small { font-size: 12px; color: var(--faint); }
+
+.choose-bin {
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+}
+
+.choose-bin:hover { color: var(--nogo); background: var(--nogo-wash); }
+
+/* --- the scene, opened up ------------------------------------------------ */
+
+.breakdown { margin-top: 28px; }
+
+.bd-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 15px;
+  border: 1px solid var(--line-soft);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--panel-2);
+}
+
+.bd-head b { font-size: 15px; font-weight: 650; display: block; }
+.bd-head small { font-size: 12px; color: var(--faint); }
+.bd-head-right { text-align: right; }
+.bd-head-right b { font-size: 19px; }
+.bd-head-right small { display: block; }
+
+.bd-synopsis {
+  margin: 0;
+  padding: 10px 15px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  border: 1px solid var(--line-soft);
+  border-bottom: none;
+  background: var(--panel);
+}
+
+.bd-takes {
+  border: 1px solid var(--line-soft);
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+}
+
+.bd-take + .bd-take { border-top: 1px solid var(--line-soft); }
+.bd-take[data-usable="false"] { background: var(--nogo-wash); }
+
+.bd-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bd-row:hover { background: var(--panel-2); }
+
+.bd-caret { color: var(--faint); width: 10px; flex: none; }
+.bd-name { font-weight: 600; flex: none; min-width: 92px; }
+.bd-name em { color: var(--warn); font-style: normal; margin-left: 4px; }
+.bd-len { color: var(--faint); flex: none; min-width: 52px; font-variant-numeric: tabular-nums; }
+.bd-what { color: var(--muted); flex: none; min-width: 150px; }
+.bd-who { color: var(--faint); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bd-flag {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--nogo);
+  color: #fff;
+}
+
+.bd-flag.warn { background: var(--warn); color: #3a2c00; }
+
+.bd-body {
+  padding: 4px 14px 16px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bd-video { width: 100%; max-width: 560px; border-radius: var(--radius-xs); background: #000; }
+
+.bd-play, .bd-nofile {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 13px;
+}
+
+.bd-play {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 7px 13px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.bd-play:hover { border-color: var(--accent); }
+.bd-nofile { color: var(--faint); }
+
+.bd-people { display: flex; flex-direction: column; gap: 10px; }
+
+.bd-person { display: flex; gap: 11px; align-items: flex-start; }
+.bd-person img, .bd-noface {
+  width: 42px; height: 42px; flex: none;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+}
+
+.bd-person-body { display: flex; flex-direction: column; gap: 3px; }
+.bd-person-body b { font-size: 13.5px; font-weight: 600; }
+.bd-prom { font-size: 11px; color: var(--faint); }
+
+.bd-gives { font-size: 12px; color: var(--muted); display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.bd-nothing { color: var(--faint); font-style: italic; }
+
+.tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 100px;
+  border: 1px solid transparent;
+}
+
+.tag.have { background: var(--go-wash); color: var(--go); border-color: var(--go); }
+.tag.missing { background: var(--nogo-wash); color: var(--nogo); border-color: var(--nogo); }
+
+.bd-problems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.bd-problems li { display: flex; gap: 9px; font-size: 12.5px; line-height: 1.45; }
+
+.bd-sev {
+  flex: none;
+  min-width: 62px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+
+.bd-problems li[data-severity="blocking"] .bd-sev { color: var(--nogo); }
+.bd-problems li[data-severity="warning"] .bd-sev { color: var(--warn); }
+.bd-problems li[data-severity="note"] .bd-sev { color: var(--faint); }
+
+.bd-issue { color: var(--muted); }
+.bd-issue em { color: var(--faint); font-style: normal; }
+
+.bd-exposure { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+
+.toggle { font-size: var(--label-md); color: var(--muted); }
+
+/* --- the day's call, and the scenes it is made of ------------------------ */
+
+.daycall {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: 14px 17px 12px;
+  box-shadow: var(--shadow);
+}
+
+/* One row. The call, the two axes, and the world it is judged against — the
+   whole point is that they are read together, so they stay on one line and
+   scroll rather than stacking. */
+.daycall-top {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.daycall-top > * { flex: none; }
+.daycall-top .worldbar { margin-left: auto; padding-left: 8px; }
+
+.daycall-scenes { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+
+.dayscene-bar {
+  flex: none;
+  width: 108px;
+  height: 7px;
+  border-radius: 100px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.dayscene-fill {
+  display: block;
+  height: 100%;
+  background: var(--go);
+  border-radius: 100px;
+  transition: width .2s ease;
+}
+
+.dayscene[data-judged="false"] .dayscene-bar {
+  background: repeating-linear-gradient(
+    -45deg, var(--line-soft) 0 4px, transparent 4px 8px);
+}
+
+.dayscene-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dayscene-pct {
+  flex: none;
+  min-width: 62px;
+  text-align: right;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.dayscene[data-judged="false"] .dayscene-pct { font-style: italic; }
+
+/* --- what world this is set in, as a chip -------------------------------- */
+
+.worldbar { position: relative; display: flex; justify-content: flex-end; }
+
+.worldchip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.worldchip:hover { border-color: var(--accent); }
+.worldchip-key { color: var(--faint); }
+.worldchip-val { font-weight: 600; }
+.worldchip-more { color: var(--accent); font-size: 11.5px; }
+
+/* Inside the dialog it is just a form: no border, no ground of its own. */
+.modal .world {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.badge.small { font-size: 11px; padding: 2px 8px; }
+.bd-verdict { display: flex; align-items: center; gap: 9px; }
+
+.daycall-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.dayscene[data-joining="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.dayscene[data-target="true"] { background: var(--panel-2); }
+.dayscene[data-target="true"]:hover { outline: 1px dashed var(--accent); outline-offset: -1px; }
+
+/* --- day scenes: pickable, and each says what it still needs -------------- */
+
+.dayscene {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+}
+
+.dayscene:hover { background: var(--panel-2); }
+.dayscene[data-open="true"] { background: var(--panel-2); }
+.dayscene[data-chosen="true"] { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.dayscene-tick { flex: none; accent-color: var(--accent); cursor: pointer; }
+
+.dayscene-main {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 5px 2px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.dayscene[data-open="true"] .dayscene-name { font-weight: 600; }
+
+/* Two states in one rule, because writing them in two passes is how the text
+   ended up the same colour as the fill it sat on.
+     no goal yet  — an outlined button, asking to be pressed
+     goal set     — quiet, appears on hover, changeable */
+.dayscene-goal {
+  flex: none;
+  font: inherit;
+  font-size: var(--label-md);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, opacity .15s;
+}
+
+/* M3 hover is a state layer over the surface, never a filled swap — which is
+   also why the label stays readable. */
+.dayscene-goal:hover { background: var(--state-hover); }
+.dayscene-goal:active { background: var(--state-press); }
+
+.dayscene-goal[data-quiet="true"] {
+  border-color: transparent;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.dayscene:hover .dayscene-goal[data-quiet="true"],
+.dayscene-goal[data-quiet="true"]:focus-visible { opacity: 1; }
+
+.dayscene-goal[data-quiet="true"]:hover {
+  background: var(--state-hover);
+  color: var(--accent);
+}
+
+.daycall .why { margin: 12px 0 0; }
+
+/* a panel you were sent to should say so */
+
+@keyframes arrived {
+  0%, 100% { box-shadow: none; }
+  20%, 60% { box-shadow: 0 0 0 3px var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dayscene-fill { transition: none; }
+}
+
+/* --- dialogs -------------------------------------------------------------- */
+
+.modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(12, 16, 20, .42);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  width: min(520px, 100%);
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 0;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
+  padding: 24px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: var(--title-lg);
+  font-weight: 400;
+  line-height: 28px;
+  letter-spacing: 0;
+}
+
+.modal-x {
+  flex: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 15px;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.modal-x:hover { color: var(--text); }
+
+.modal-blurb {
+  margin: 10px 0 0;
+  font-size: var(--body-md);
+  color: var(--muted);
+  line-height: 20px;
+  letter-spacing: 0.016em;
+}
+
+.modal-body { margin-top: 16px; }
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.modal-quiet { margin: 14px 0 0; font-size: 12px; color: var(--faint); line-height: 1.5; }
+
+/* --- what a scene needs, as a checklist ---------------------------------- */
+
+.goal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.goal-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 11px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.goal-list label:hover { background: var(--panel-2); }
+.goal-list input { margin-top: 3px; flex: none; accent-color: var(--accent); }
+
+.goal-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.goal-text b { font-size: 14px; font-weight: 600; }
+.goal-text small { font-size: 12px; color: var(--faint); line-height: 1.45; }
+
+.goal-state {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding-top: 3px;
+  white-space: nowrap;
+}
+
+.goal-state[data-state="have"] { color: var(--go); }
+.goal-state[data-state="missing"] { color: var(--nogo); }
+
+/* --- where a scene stands, in one line ----------------------------------- */
+
+.scene-goal-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 13px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-xs);
+}
+
+.scene-goal-line .tag { margin-left: 5px; }
+.scene-goal-line .tag[data-state="have"] { background: var(--go-wash); color: var(--go); border-color: var(--go); }
+.scene-goal-line .tag[data-state="missing"] { background: var(--nogo-wash); color: var(--nogo); border-color: var(--nogo); }
+
+/* --- saying who is in a take --------------------------------------------- */
+
+.scene-goal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.who-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.who-list li {
+  padding: 10px 11px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+
+.who-take { display: flex; align-items: baseline; gap: 9px; margin-bottom: 7px; }
+.who-take b { font-size: 13px; font-weight: 600; }
+.who-take small { font-size: 11.5px; color: var(--faint); }
+
+.who-people { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+.who-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 3px 5px 3px 10px;
+  border-radius: 100px;
+  background: var(--go-wash);
+  border: 1px solid var(--go);
+  color: var(--go);
+}
+
+.who-chip button {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: .65;
+  padding: 0 3px;
+}
+
+.who-chip button:hover { opacity: 1; }
+
+.who-add {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 11px;
+  border-radius: 100px;
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.who-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.who-picker { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+
+.who-picker button:not(.linky) {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 11px;
+  border-radius: 100px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.who-picker button:not(.linky):hover { border-color: var(--accent); color: var(--accent); }
+
+.who-picker input {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  width: 130px;
+}
+
+/* --- scenes, inside the day's call --------------------------------------- */
+
+.dayscene-no {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.dayscene[data-open="true"] .dayscene-no { color: var(--accent); }
+
+.dayscene-body { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.dayscene-body b { font-size: 13px; font-weight: 550; }
+.dayscene-body small { font-size: 11.5px; color: var(--faint); }
+.dayscene[data-open="true"] .dayscene-body b { font-weight: 650; }
+
+.dayscene-body .just-in {
+  margin-left: 7px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.dayscene-add {
+  align-self: flex-start;
+  margin-top: 4px;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: var(--radius-xs);
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.dayscene-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.dayscene.adding { gap: 8px; padding: 6px 4px; }
+
+.dayscene.adding input {
+  flex: 1;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* --- who is on the clock -------------------------------------------------- */
+
+.crewbar { position: relative; display: flex; }
+
+.crew-tiers { display: flex; flex-direction: column; gap: 6px; }
+
+.crew-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  padding: 11px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.crew-tier:hover { background: var(--state-hover); }
+.crew-tier[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.crew-tier b { font-size: var(--body-md); font-weight: 500; }
+.crew-tier small { font-size: var(--body-sm); color: var(--muted); line-height: 16px; }
+.crew-tier em {
+  font-style: normal;
+  font-size: var(--label-md);
+  color: var(--faint);
+  letter-spacing: 0.04em;
+}
+
+.crew-departments {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.crew-departments label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--body-sm);
+  color: var(--muted);
+}
+
+.crew-departments input {
+  width: 72px;
+  font: inherit;
+  font-size: var(--body-sm);
+  text-align: right;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- what kind of shoot, asked when the day is made ---------------------- */
+
+.choose-crew {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--body-sm);
+  color: var(--muted);
+}
+
+.choose-crew > span { margin-right: 4px; }
+
+.choose-crew button {
+  font: inherit;
+  font-size: var(--label-md);
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.choose-crew button:hover { background: var(--state-hover); }
+.choose-crew button[data-active="true"] {
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.choose-crew small {
+  flex-basis: 100%;
+  font-size: var(--label-md);
+  color: var(--faint);
+  line-height: 16px;
+}
+
+.dayscene-newplace {
+  flex: 1;
+  min-width: 180px;
+  font: inherit;
+  font-size: var(--body-sm);
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* --- the crew, working ---------------------------------------------------- */
+
+.crewgraph {
+  margin-top: 16px;
+  padding: 15px 17px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.crewgraph-head { margin-bottom: 14px; }
+.crewgraph-head b { font-size: var(--title-sm); font-weight: 500; display: block; }
+.crewgraph-head small { font-size: var(--label-md); color: var(--faint); }
+
+.crewrow { margin-bottom: 14px; }
+
+.crewrow-title {
+  display: block;
+  font-size: var(--label-sm);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 7px;
+}
+
+.crewrow-track {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.crewstep { display: flex; align-items: stretch; flex: 1; min-width: 0; }
+
+/* the handoff: fills left to right when the work actually moved on */
+.crewedge {
+  flex: none;
+  width: 20px;
+  height: 2px;
+  background: var(--line);
+  position: relative;
+  overflow: hidden;
+}
+
+.crewedge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.crewedge[data-flowing="true"]::after {
+  animation: handoff .5s ease forwards;
+}
+
+@keyframes handoff { to { transform: scaleX(1); } }
+
+.crewnode {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-soft);
+  background: var(--panel-2);
+  transition: border-color .25s, background .25s, box-shadow .25s;
+}
+
+.crewnode b {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--body-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* how long it took — the number that cannot be staged */
+.crewnode b i {
+  font-style: normal;
+  font-size: var(--label-sm);
+  font-weight: 400;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.crewnode[data-state="done"] b i { color: var(--go); }
+
+.crewnode small {
+  font-size: var(--label-sm);
+  line-height: 14px;
+  color: var(--faint);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* working: the one place motion is earned, because something is happening */
+.crewnode[data-state="working"] {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  animation: thinking 1.4s ease-in-out infinite;
+}
+
+.crewnode[data-state="working"] b,
+.crewnode[data-state="working"] .crewnode[data-state="working"] small { color: var(--muted); }
+
+@keyframes thinking {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(11, 87, 208, .22); }
+  50%      { box-shadow: 0 0 0 5px rgba(11, 87, 208, 0); }
+}
+
+.crewnode[data-state="done"] { border-color: var(--go); background: var(--panel); }
+.crewnode[data-state="done"] b { color: var(--go); }
+.crewnode[data-state="done"] small { color: var(--muted); }
+
+.crewnode[data-state="idle"] { opacity: .5; }
+
+/* what kind of work it is — the argument the whole project makes */
+.crewnode[data-kind="computed"] { border-left: 3px solid var(--line); }
+.crewnode[data-kind="partner"] { border-left: 3px solid var(--warn); }
+.crewnode[data-kind="model"] { border-left: 3px solid var(--model, #5b4a86); }
+
+.crewgraph-key {
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+  font-size: var(--label-md);
+  color: var(--muted);
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.crewgraph-key .crewbadge + .crewbadge { margin-left: 4px; }
+.crewgraph-key .crewbadge:not(:first-child) { margin-left: 10px; }
+
+.crewgraph-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.crewgraph-dot.model { background: var(--model, #5b4a86); }
+.crewgraph-dot.computed { background: var(--line); }
+.crewgraph-dot.partner { background: var(--warn); }
+.crewgraph-key > .crewgraph-dot:not(:first-child) { margin-left: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .crewnode[data-state="working"] { animation: none; }
+  .crewedge[data-flowing="true"]::after { animation: none; transform: scaleX(1); }
+}
+
+/* --- what is running right now ------------------------------------------- */
+
+.crewname { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.crewname { overflow: hidden; text-overflow: ellipsis; }
+
+.crewspin {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-wash);
+  border-top-color: var(--accent);
+  animation: crewspin .7s linear infinite;
+}
+
+@keyframes crewspin { to { transform: rotate(360deg); } }
+
+.crewmarks { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+
+/* Work that happens at the same time is joined underneath, so the shape of the
+   run is visible rather than described. */
+.crewstep[data-together="true"] { position: relative; }
+
+.crewstep[data-together="true"]::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -5px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: .28;
+}
+
+.crewstep[data-together="true"] + .crewstep[data-together="true"]::after {
+  left: -14px;
+}
+
+.crewrow-track { padding-bottom: 10px; }
+
+.crewgraph-key-note {
+  margin-left: auto;
+  font-size: var(--label-md);
+  color: var(--faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crewspin { animation: none; border-top-color: var(--accent-wash); }
+}
+
+/* --- what each stage runs on --------------------------------------------- */
+/*
+   One badge, one meaning, everywhere it appears. A judge should be able to
+   glance at a box and know whether a model decided this or a computer did,
+   and whose service it went through.
+*/
+
+.crewbadge {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.crewbadge[data-vendor="gemini"] {
+  background: var(--model-soft, #ece8f5);
+  color: var(--model, #5b4a86);
+  border-color: var(--model, #5b4a86);
+}
+
+.crewbadge[data-vendor="clickhouse"] {
+  background: #fff2d6;
+  color: #8a5300;
+  border-color: #c78a24;
+}
+
+.crewbadge[data-vendor="parallel"] {
+  background: #e2f0e8;
+  color: #146c2e;
+  border-color: #2f8f5b;
+}
+
+/* Computed is deliberately the quiet one — it is the absence of a vendor. */
+.crewbadge[data-vendor="python"] {
+  background: var(--panel-2);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.crewbadge[data-vendor="ffmpeg"] {
+  background: var(--panel-2);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.crewbadge[data-vendor="mcp"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-color: var(--accent);
+  cursor: help;
+}
+
+/* the call that actually went out, as it appears in the log */
+.crewcall {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.crewmarks { flex-wrap: wrap; }
+
+/* --- watching the crew ---------------------------------------------------- */
+
+.modal[data-wide="true"] { width: min(1080px, 100%); }
+
+button.secondary.watch { display: inline-flex; align-items: center; gap: 7px; }
+
+button.secondary.watch[data-live="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* a live dot, so you know there is something to watch without opening it */
+.watch-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: watchpulse 1.2s ease-in-out infinite;
+}
+
+@keyframes watchpulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(11, 87, 208, .35); }
+  50%      { opacity: .6; box-shadow: 0 0 0 4px rgba(11, 87, 208, 0); }
+}
+
+/* inside a dialog it is the whole subject, not a panel on a page */
+.modal .crewgraph-key { margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .watch-dot { animation: none; }
+}

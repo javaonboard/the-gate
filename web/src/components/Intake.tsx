@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Modal } from "./Modal";
 
 /** The three ways footage gets in — or gets thrown away.
  *
@@ -11,9 +12,11 @@ type Props = {
   sceneName: string;
   onStarted: (runId: string) => void;
   onCleared: () => void;
+  onClose: () => void;
 };
 
-export function Intake({ sceneId, sceneName, onStarted, onCleared }: Props) {
+export function Intake({ sceneId, sceneName, onStarted, onCleared,
+                        onClose }: Props) {
   const [busy, setBusy] = useState<"film" | "clips" | "reset" | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [over, setOver] = useState<"film" | "clips" | null>(null);
@@ -81,6 +84,12 @@ export function Intake({ sceneId, sceneName, onStarted, onCleared }: Props) {
   }
 
   return (
+    <Modal
+      title="Bring footage in"
+      blurb="Drop a whole film and it sorts itself into scenes, or add clips to
+             the scene you have open. Nothing needs typing either way."
+      onClose={onClose}
+    >
     <div className="intake">
       <button
         className="intake-card"
@@ -159,5 +168,6 @@ export function Intake({ sceneId, sceneName, onStarted, onCleared }: Props) {
 
       {note && <div className="intake-note">{note}</div>}
     </div>
+    </Modal>
   );
 }

@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityLine } from "./components/ActivityLine";
+import { CrewGraph } from "./components/CrewGraph";
+import { Choose } from "./screens/Choose";
 import { DayBar } from "./components/DayBar";
-import type { Scene } from "./components/SceneBar";
+import type { Scene } from "./api";
 import { Today } from "./screens/Today";
 import { useRun } from "./useRun";
-
-const FIRST_SCENE = "prod_now_sc001";
 
 export default function App() {
   const [scene, setScene] = useState<Scene | null>(null);
   const [hoursIn, setHoursIn] = useState(9);
   const [useAgent, setUseAgent] = useState(true);
-  const sceneId = scene?.scene_id ?? FIRST_SCENE;
+  const sceneId = scene?.scene_id ?? "";
   const { events, call, busy, error, touched, start, follow, reset } =
     useRun(sceneId);
   const [dataKey, setDataKey] = useState(0);
@@ -26,8 +26,18 @@ export default function App() {
 
   // Footage that has just been taken in is the thing you want to look at, so
   // open the scene it landed in rather than leaving the old one selected.
+  //
+  // Once. This used to re-fire every time a check finished, which meant that
+  // opening any other scene started a check, the check ending re-ran this, and
+  // it dragged you back to the scene the last upload landed in. You could not
+  // stay on scene 2.
+  const followed = useRef("");
   useEffect(() => {
     if (!touched.length || busy) return;
+    const key = touched.join(",");
+    if (followed.current === key) return;
+    followed.current = key;
+
     const landed = touched[0];
     if (scene?.scene_id === landed) return;
     void fetch("/api/scenes")
@@ -42,25 +52,45 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [touched, busy]);
 
-  const [ready, setReady] = useState(false);
+  // Nothing is assigned. Until a shoot day is chosen, the chooser is the
+  // whole interface — which also means there is never a doubt about which
+  // workspace an upload landed in.
+  const [workspace, setWorkspace] = useState<string | null>(null);
+  const [workspaceLabel, setWorkspaceLabel] = useState("");
+  const [checked, setChecked] = useState(false);
+  const [watching, setWatching] = useState(false);
 
-  // Settle the workspace first. Firing everything at once gave each request
-  // its own workspace, and the last cookie set won.
   useEffect(() => {
     void fetch("/api/session")
-      .then(() => setReady(true))
-      .catch(() => setReady(true));
+      .then((r) => r.json())
+      .then((s: { workspace: string | null; label?: string }) => {
+        setWorkspaceLabel(s.label ?? "");
+        setWorkspace(s.workspace);
+      })
+      .catch(() => setWorkspace(null))
+      .finally(() => setChecked(true));
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
-    void start(hoursIn, useAgent);
-    // first call only; after that the AD asks
+    if (!workspace) return;
+    void fetch("/api/scenes")
+      .then((r) => r.json())
+      .then((rows: Scene[]) => {
+        const shot = rows.find((s) => s.place !== "nothing yet") ?? rows[0];
+        if (!shot) return;
+        setScene(shot);
+        void start(hoursIn, useAgent, shot.scene_id);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [workspace]);
 
-  const shootClock = new Date(2026, 7, 16, 7, 0);
-  shootClock.setMinutes(shootClock.getMinutes() + hoursIn * 60);
+  async function leave() {
+    await fetch("/api/workspaces/leave", { method: "POST" });
+    setWorkspace(null);
+    setScene(null);
+    followed.current = "";
+    reset();
+  }
 
   return (
     <div className="shell">
@@ -68,6 +98,7 @@ export default function App() {
         <div className="wordmark">
           THE GATE
           <span>
+            {workspaceLabel ? ` · ${workspaceLabel}` : ""}
             {scene ? ` · scene ${scene.number} · ${scene.place}` : ""}
           </span>
         </div>
@@ -77,14 +108,16 @@ export default function App() {
 
           <label
             className="toggle"
-            title="Turn the language models off and show only the computed call"
+            title="Off: the same call and the same numbers, written by the
+                   computation instead of the crew. Instant, and it still works
+                   if the models are unreachable."
           >
             <input
               type="checkbox"
               checked={useAgent}
               onChange={(e) => setUseAgent(e.target.checked)}
             />
-            crew speaks
+            Crew explains the call
           </label>
 
           <button
@@ -94,13 +127,45 @@ export default function App() {
           >
             {busy ? "Checking…" : "Check the gate"}
           </button>
+
+          <button
+            className="secondary watch"
+            data-live={busy}
+            onClick={() => setWatching(true)}
+            title="Watch the crew work — which agent is running, what it is using, and how long each one takes"
+          >
+            {busy && <span className="watch-dot" aria-hidden="true" />}
+            The crew
+          </button>
+
+          <button
+            className="secondary"
+            onClick={leave}
+            title="Close this shoot day and pick another"
+          >
+            Change day
+          </button>
         </div>
       </header>
+
+      {watching && (
+        <CrewGraph events={events} busy={busy}
+                   onClose={() => setWatching(false)} />
+      )}
 
       <ActivityLine events={events} busy={busy} />
 
       <main>
-        {!ready && <div className="empty">Starting up…</div>}
+        {!checked && <div className="empty">Looking for your work…</div>}
+
+        {checked && !workspace && (
+          <Choose
+            onChosen={(id, label) => {
+              setWorkspaceLabel(label);
+              setWorkspace(id);
+            }}
+          />
+        )}
 
         {error && (
           <div className="empty" style={{ color: "var(--nogo)" }}>
@@ -108,17 +173,20 @@ export default function App() {
           </div>
         )}
 
-        {ready && <Today
+        {workspace && <Today
           call={call}
           scene={scene}
           dataKey={dataKey}
           fresh={touched}
           onScene={(s) => {
+            // Opening a scene is looking, not asking. Running the whole gate
+            // on a click meant every glance cost a model call and reset the
+            // panel the AD was in the middle of using — and the call at the
+            // top is the day's now, so it does not change with the scene.
             setScene(s);
-            void start(hoursIn, useAgent, s.scene_id);
           }}
           onIngested={(id) => follow(id)}
-          onChanged={() => start(hoursIn, useAgent)}
+          onChanged={() => setDataKey((n) => n + 1)}
           onCleared={() => {
             // The data is gone; anything still selected refers to rows that
             // no longer exist, and re-rendering it looks like the reset failed.

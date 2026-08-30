@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { usd } from "../api";
+import { SceneGoal } from "./SceneGoal";
+import { WhoIsIn } from "./WhoIsIn";
 import { SectionTitle } from "./SectionTitle";
 
 /** What we have on each person, and what we still need.
@@ -27,12 +29,23 @@ type Row = {
   cells: Cell[];
 };
 
+type SceneShot = {
+  shot: string;
+  label: string;
+  help: string;
+  required: boolean;
+  state: string;
+  takes: string[];
+  recover_cost_usd: number;
+};
+
 type Matrix = {
   takes: number;
   bands: string[];
   band_label: Record<string, string>;
   band_help: Record<string, string>;
   characters: Row[];
+  scene_shots?: SceneShot[];
   summary: {
     characters: number;
     required: number;
@@ -53,6 +66,8 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [merging, setMerging] = useState<string | null>(null);
+  const [goal, setGoal] = useState(false);
+  const [who, setWho] = useState(false);
 
   async function load() {
     setData(await fetch(`/api/scenes/${sceneId}/matrix`).then((r) => r.json()));
@@ -99,20 +114,83 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
     // Two different situations that used to read the same. No footage means
     // drop some in; footage with nobody in it means there is nothing to be
     // short of, which is not the same as being covered.
+    //
+    // Either way the goal has to be reachable from here. This branch used to
+    // return a sentence and nothing else, which left the scenes that most
+    // need a goal — a door handle, a chase with no faces in it — as the only
+    // ones with no way to set or change one.
     const where = sceneName || "this scene";
+    const asked = data.scene_shots?.filter((x) => x.required) ?? [];
+
     return (
-      <div className="empty">
-        {data.takes > 0 ? (
-          <>
-            <b>No one on camera in {where}.</b> {data.takes} take
-            {data.takes > 1 ? "s" : ""} logged, but no faces were found — so
-            there is nothing to check coverage against. If people should be in
-            it, they may be too small, too dark or facing away to recognise.
-          </>
-        ) : (
-          <>Nothing shot in {where} yet. Drop footage in and the cast builds itself.</>
+      <section style={{ marginTop: 28 }}>
+        <SectionTitle icon="people">What {where} needs</SectionTitle>
+
+        <div className="empty">
+          {data.takes > 0 ? (
+            <>
+              <b>No one on camera in {where}.</b> {data.takes} take
+              {data.takes > 1 ? "s" : ""} logged, but no faces were found. That
+              is not a fault — a scene can be a hand on a door handle, or a
+              chase with nobody's face in it. Say what it needed and it gets
+              checked against that instead.
+            </>
+          ) : (
+            <>Nothing shot in {where} yet. Drop footage in and the cast builds itself.</>
+          )}
+        </div>
+
+        <div className="scene-goal-line">
+          <span>
+            {asked.length ? (
+              <>
+                Needs{" "}
+                {asked.map((x) => (
+                  <span key={x.shot} className="tag" data-state={x.state}>
+                    {x.label.toLowerCase()}
+                  </span>
+                ))}
+              </>
+            ) : (
+              "Nothing asked of this scene yet."
+            )}
+          </span>
+          <span className="scene-goal-actions">
+            {data.takes > 0 && (
+              <button className="secondary small" onClick={() => setWho(true)}>
+                Say who is in it
+              </button>
+            )}
+            <button className="secondary small" onClick={() => setGoal(true)}>
+              {asked.length ? "Change the goal" : "Set the goal"}
+            </button>
+          </span>
+        </div>
+
+        {who && (
+          <WhoIsIn
+            sceneId={sceneId}
+            sceneName={where}
+            onClose={() => setWho(false)}
+            onSaved={() => {
+              void load();
+              onChanged();
+            }}
+          />
         )}
-      </div>
+
+        {goal && (
+          <SceneGoal
+            sceneId={sceneId}
+            sceneName={where}
+            onClose={() => setGoal(false)}
+            onSaved={() => {
+              void load();
+              onChanged();
+            }}
+          />
+        )}
+      </section>
     );
   }
 
@@ -131,8 +209,38 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
           </>
         }
       >
-        Who's in {sceneName || "this scene"}
+        What {sceneName || "this scene"} needs
       </SectionTitle>
+
+      {data.scene_shots && (
+        <div className="scene-goal-line">
+          <span>
+            {data.scene_shots.some((x) => x.required) ? (
+              <>
+                Also needs{" "}
+                {data.scene_shots
+                  .filter((x) => x.required)
+                  .map((x) => (
+                    <span key={x.shot} className="tag"
+                          data-state={x.state}>{x.label.toLowerCase()}</span>
+                  ))}
+              </>
+            ) : (
+              "Nothing asked of the scene itself — only coverage of the people below."
+            )}
+          </span>
+          <span className="scene-goal-actions">
+            <button className="secondary small" onClick={() => setWho(true)}>
+              Someone missing?
+            </button>
+            <button className="secondary small" onClick={() => setGoal(true)}>
+              {data.scene_shots.some((x) => x.required)
+                ? "Change the goal"
+                : "Set the goal"}
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="matrix">
         <div className="matrix-head">
@@ -225,6 +333,30 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
           </div>
         ))}
       </div>
+
+      {who && (
+        <WhoIsIn
+          sceneId={sceneId}
+          sceneName={sceneName || "this scene"}
+          onClose={() => setWho(false)}
+          onSaved={() => {
+            void load();
+            onChanged();
+          }}
+        />
+      )}
+
+      {goal && (
+        <SceneGoal
+          sceneId={sceneId}
+          sceneName={sceneName || "this scene"}
+          onClose={() => setGoal(false)}
+          onSaved={() => {
+            void load();
+            onChanged();
+          }}
+        />
+      )}
 
       {merging && (
         <div className="merge-hint">

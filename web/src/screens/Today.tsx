@@ -1,12 +1,11 @@
 import { useState } from "react";
-import type { GateCall } from "../api";
-import { clock, pct, usd } from "../api";
+import type { GateCall, Scene } from "../api";
+import { pct, usd } from "../api";
+import { Breakdown } from "../components/Breakdown";
 import { CastMatrix } from "../components/CastMatrix";
+import { DayLine } from "../components/DayLine";
 import { Intake } from "../components/Intake";
-import { Problems } from "../components/Problems";
-import { SceneBar, type Scene } from "../components/SceneBar";
 import { SectionTitle } from "../components/SectionTitle";
-import { WorldPanel } from "../components/WorldPanel";
 
 /** Several missing shots of one person read as one job, not three. */
 function groupByPerson(options: GateCall["options"]) {
@@ -21,14 +20,8 @@ function groupByPerson(options: GateCall["options"]) {
   return [...by.values()].sort((a, b) => b.saving - a.saving);
 }
 
-function oddsColour(p: number) {
-  if (p >= 0.7) return "var(--go)";
-  if (p >= 0.4) return "var(--warn)";
-  return "var(--nogo)";
-}
-
-export function Today({ call, scene, dataKey, fresh, onScene, onIngested,
-                       onChanged, onCleared }: {
+export function Today({ call, scene, dataKey, fresh, onScene,
+                       onIngested, onChanged, onCleared }: {
   call: GateCall | null;
   scene: Scene | null;
   dataKey: number;
@@ -39,82 +32,55 @@ export function Today({ call, scene, dataKey, fresh, onScene, onIngested,
   onCleared: () => void;
 }) {
   const [bumped, setBumped] = useState(0);
+  const [footage, setFootage] = useState(false);
   const reloadKey = bumped + dataKey;
   const setReloadKey = (fn: (n: number) => number) => setBumped(fn);
   const sceneId = scene?.scene_id ?? "";
 
   return (
     <>
-      {/* the call, compact, straight under the banner */}
-      <div className="topline">
-        {call ? (
-          <>
-            <span
-              className="badge"
-              data-go={call.go}
-              data-unjudged={call.coverage.judged === false}
-            >
-              {call.verdict}
-            </span>
-
-            <span className="topstat">
-              <b style={{ color: oddsColour(call.day.p_make_the_day) }}>
-                {pct(call.day.p_make_the_day)}
-              </b>
-              <small>chance of finishing today</small>
-            </span>
-
-            <span className="topstat">
-              <b>
-                {call.coverage.judged === false
-                  ? "—"
-                  : pct(call.coverage.completeness)}
-              </b>
-              <small>shots we have</small>
-            </span>
-
-            <span className="topstat">
-              <b>{clock(call.day.hard_stop)}</b>
-              <small>latest we can finish</small>
-            </span>
-
-            {call.coverage.exposure_usd > 0 && (
-              <span className="topstat">
-                <b style={{ color: "var(--warn)" }}>
-                  {usd(call.coverage.exposure_usd)}
-                </b>
-                <small>at risk if we move on</small>
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="topstat">
-            <small>working out where we are…</small>
-          </span>
-        )}
-      </div>
-
-      {call && (
-        <details className="why">
-          <summary>Why</summary>
-          <p>{call.spoken || call.summary}</p>
-        </details>
-      )}
-
-      {/* footage in, or thrown away */}
-      <SectionTitle icon="footage">Footage</SectionTitle>
-      <Intake
-        sceneId={sceneId}
-        sceneName={scene ? `scene ${scene.number} · ${scene.place}` : ""}
-        onStarted={(id) => {
+      {/* the day's call, with the scenes it is made of */}
+      <DayLine
+        fresh={fresh}
+        onFootage={() => setFootage(true)}
+        reloadKey={reloadKey}
+        call={call}
+        openScene={sceneId}
+        onRechecked={(id) => {
           setReloadKey((n) => n + 1);
           onIngested(id);
         }}
-        onCleared={() => {
+        onChanged={() => {
           setReloadKey((n) => n + 1);
-          onCleared();
+          onChanged();
+        }}
+        onScene={(id) => {
+          void fetch("/api/scenes")
+            .then((r) => r.json())
+            .then((rows: Scene[]) => {
+              const found = rows.find((s) => s.scene_id === id);
+              if (found) onScene(found);
+            });
         }}
       />
+
+      {footage && (
+        <Intake
+          sceneId={sceneId}
+          sceneName={scene ? `scene ${scene.number} · ${scene.place}` : ""}
+          onClose={() => setFootage(false)}
+          onStarted={(id) => {
+            setFootage(false);
+            setReloadKey((n) => n + 1);
+            onIngested(id);
+          }}
+          onCleared={() => {
+            setFootage(false);
+            setReloadKey((n) => n + 1);
+            onCleared();
+          }}
+        />
+      )}
 
       {call && call.options.filter((o) => o.worth_it).length > 0 && (
         <section style={{ marginTop: 28 }}>
@@ -146,32 +112,21 @@ export function Today({ call, scene, dataKey, fresh, onScene, onIngested,
         </section>
       )}
 
-      {/* pick a scene */}
-      <div style={{ marginTop: 28 }}>
-        <SectionTitle icon="scenes">Scenes today</SectionTitle>
-      </div>
-      <SceneBar selected={sceneId} onSelect={onScene} reloadKey={reloadKey}
-                fresh={fresh} />
-
-      {/* and the breakdown of the one that's open */}
       {sceneId && (
-        <WorldPanel
-          sceneId={sceneId}
-          onRechecked={(id) => {
-            setReloadKey((n) => n + 1);
-            onIngested(id);
-          }}
-        />
+        <Breakdown sceneId={sceneId} reloadKey={reloadKey} call={call} />
       )}
-
-      {sceneId && <Problems sceneId={sceneId} reloadKey={reloadKey} />}
 
       {sceneId && (
         <CastMatrix
           sceneId={sceneId}
           sceneName={scene ? `scene ${scene.number} · ${scene.place}` : ""}
           reloadKey={reloadKey}
-          onChanged={onChanged}
+          onChanged={() => {
+            // changing what a scene needs changes what is missing, and the
+            // breakdown above is showing exactly that
+            setReloadKey((n) => n + 1);
+            onChanged();
+          }}
         />
       )}
     </>

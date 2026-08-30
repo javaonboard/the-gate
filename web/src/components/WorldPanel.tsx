@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SectionTitle } from "./SectionTitle";
+import { Modal } from "./Modal";
 
 /** What world this is set in.
  *
@@ -53,27 +53,43 @@ export function WorldPanel({ sceneId, onRechecked }: {
     }
   }
 
-  return (
-    <section style={{ marginTop: 28 }}>
-      <SectionTitle
-        icon="world"
-        aside={
-          <button className="linky" onClick={() => setOpen((o) => !o)}>
-            {open ? "hide" : "change"}
-          </button>
-        }
-      >
-        Set in {world.period || "no period yet"}
-      </SectionTitle>
+  /** "near-future science fiction, around 2040" is not a label on a button. */
+  const short = (world.period || "").split(/[,—-]/)[0].trim() || "not set";
 
-      {!open && (
-        <p className="world-line">
-          {world.setting || "Nowhere in particular."} Read from the footage —
-          anything that could not exist there is flagged.
-        </p>
-      )}
+  const why =
+    "What this film is set in, so anything that could not exist there gets "
+    + "flagged as wrong — a paper cup in a medieval scene, a zip on a Roman "
+    + "tunic. Read from the footage; change it if it guessed wrong.";
+
+  return (
+    <div className="worldbar">
+      <button className="worldchip" onClick={() => setOpen((o) => !o)}
+              title={
+                world.setting
+                  ? `${world.period} — ${world.setting}.
+
+${why}`
+                  : why
+              }>
+        <span className="worldchip-key">World</span>
+        <span className="worldchip-val">{short}</span>
+        <span className="worldchip-more">{open ? "close" : "change"}</span>
+      </button>
 
       {open && (
+        <Modal
+          title="What is this film set in?"
+          blurb="Everything QC flags as wrong is judged against this — a paper
+                 cup in a medieval scene, a zip on a Roman tunic. It was read
+                 from the footage; change it if it guessed wrong."
+          onClose={() => setOpen(false)}
+          footer={
+            <button className="primary" disabled={saving}
+                    onClick={() => { void save(world, true); setOpen(false); }}>
+              {saving ? "Checking…" : "Save and check the footage again"}
+            </button>
+          }
+        >
         <div className="world">
           <div className="world-presets">
             {PRESETS.map((p) => (
@@ -114,12 +130,9 @@ export function WorldPanel({ sceneId, onRechecked }: {
             />
           </label>
 
-          <button className="primary" disabled={saving}
-                  onClick={() => save(world, true)}>
-            {saving ? "Checking…" : "Save and check the footage again"}
-          </button>
         </div>
+        </Modal>
       )}
-    </section>
+    </div>
   );
 }

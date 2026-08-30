@@ -17,6 +17,9 @@ export function useRun(scene: string) {
 
   const start = useCallback(
     async (hoursIn: number, useAgent: boolean, sceneOverride?: string) => {
+      const target = sceneOverride ?? scene;
+      if (!target) return;          // an empty day has nothing to check yet
+
       source.current?.close();
       setEvents([]);
       setError(null);
@@ -24,7 +27,7 @@ export function useRun(scene: string) {
 
       try {
         const res = await fetch(
-          `/api/runs?scene_id=${sceneOverride ?? scene}` +
+          `/api/runs?scene_id=${target}` +
             `&hours_in=${hoursIn}&use_agent=${useAgent}`,
           { method: "POST" }
         );

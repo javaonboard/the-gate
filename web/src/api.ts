@@ -116,3 +116,25 @@ export const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 export const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+
+/** A scene in the day's work.
+ *
+ *  One continuous piece of story in one place — the canal street, the
+ *  workshop. It is what people say out loud, and what footage gets shot into.
+ *  Camera positions live inside it and are worked out from the footage. */
+export type Scene = {
+  scene_id: string;
+  number: string;
+  place: string;
+  where: string;
+  when: string;
+  takes: number;
+  positions: number;
+  people: number;
+  have: number;
+  required: number;
+  missing: number;
+  exposure_usd: number;
+  complete: boolean;
+};
