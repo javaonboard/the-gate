@@ -164,8 +164,8 @@ export function Choose({ onChosen }: { onChosen: (id: string, label: string) => 
         <span className="choose-body">
           <b>{listing.demo.label}</b>
           <small>
-            {listing.demo.scenes} scenes · {listing.demo.takes} takes · read-only
-            — a real film, already analysed
+            {listing.demo.scenes} scene{listing.demo.scenes === 1 ? "" : "s"} ·{" "}
+            {listing.demo.takes} takes · read-only
           </small>
         </span>
       </button>

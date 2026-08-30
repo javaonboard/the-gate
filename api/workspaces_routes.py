@@ -100,11 +100,25 @@ def list_workspaces(request: Request):
         parameters={"d": ws.DEMO},
     ).result_rows[0]
 
+    # Named after what is actually in it. It used to say "Tears of Steel",
+    # which stopped being true the moment the demo was rebuilt on other
+    # footage and nobody noticed.
+    places = [
+        r[0].replace("_", " ") for r in ch.query(
+            f"SELECT location_id FROM {DB}.scenes "
+            f"WHERE production_id = %(d)s AND location_id != 'nothing_yet' "
+            f"ORDER BY scene_id LIMIT 2",
+            parameters={"d": ws.DEMO},
+        ).result_rows
+    ]
+    demo_label = ("A day already shot: " + " and ".join(places)
+                  if places else "The demo")
+
     current = request.cookies.get(ws.COOKIE, "")
 
     return {
         "current": current,
-        "demo": {"workspace_id": ws.DEMO, "label": "The demo — Tears of Steel",
+        "demo": {"workspace_id": ws.DEMO, "label": demo_label,
                  "kind": "demo", "scenes": demo[0], "takes": demo[1]},
         "workspaces": [
             {"workspace_id": r[0], "label": r[1] or "Untitled", "kind": r[2],
