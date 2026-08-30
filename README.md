@@ -138,14 +138,19 @@ question every time the AD asks. Everything lands in ClickHouse.
 
 Needs Python 3.12, Node 22, ffmpeg, and a `.env` — copy `.env.example`.
 
-```bash
-uv venv && uv pip install -r requirements.txt
-python -m data.schema                 # create the tables
+```powershell
+uv venv
+uv pip install -r requirements.txt
+python -m data.schema
 uvicorn api.main:app --reload --port 8080
 ```
 
-```bash
-cd web && npm install && npm run dev
+In a second terminal:
+
+```powershell
+cd web
+npm install
+npm run dev
 ```
 
 Then open http://localhost:5173.
@@ -160,18 +165,25 @@ The ClickHouse MCP server runs separately, as the read-only agent user:
 
 ## Deploying it
 
+Build it locally first. Docker Desktop has to be running.
+
+```powershell
+docker build -t the-gate .
+docker run -p 8080:8080 --env-file .env the-gate
+```
+
 One container: the API serves the built interface, so there is one origin and
 no CORS.
 
-```bash
-gcloud run deploy the-gate \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --min-instances 1 --max-instances 1 \
-  --cpu-boost --no-cpu-throttling \
-  --memory 2Gi --timeout 3600 \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT,GOOGLE_CLOUD_LOCATION=global,CLICKHOUSE_HOST=$CH_HOST,CLICKHOUSE_DATABASE=the_gate" \
+```powershell
+gcloud run deploy the-gate `
+  --source . `
+  --region us-central1 `
+  --allow-unauthenticated `
+  --min-instances 1 --max-instances 1 `
+  --cpu-boost --no-cpu-throttling `
+  --memory 2Gi --timeout 3600 `
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=$env:GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION=global,CLICKHOUSE_HOST=$env:CLICKHOUSE_HOST,CLICKHOUSE_DATABASE=the_gate" `
   --set-secrets "CLICKHOUSE_PASSWORD=clickhouse-password:latest,PARALLEL_API_KEY=parallel-key:latest"
 ```
 
@@ -185,8 +197,9 @@ Three flags matter:
 
 Then seed the demo day:
 
-```bash
-python -m data.seed_demo --film footage/horror-10min.mp4
+```powershell
+python -m data.seed_demo --film ..
+ootage\horror-10min.mp4
 ```
 
 **Known limit:** clips and face crops are written to the container's own disk,
