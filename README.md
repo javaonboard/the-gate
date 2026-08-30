@@ -169,8 +169,23 @@ Build it locally first. Docker Desktop has to be running.
 
 ```powershell
 docker build -t the-gate .
-docker run -p 8080:8080 --env-file .env the-gate
 ```
+
+The container has no Google credentials of its own, so hand it yours. On Cloud
+Run this is not needed, the service account is picked up automatically.
+
+```powershell
+docker run -p 8080:8080 --env-file .env `
+  -v "$env:APPDATA\gcloudpplication_default_credentials.json:/adc.json:ro" `
+  -e GOOGLE_APPLICATION_CREDENTIALS=/adc.json `
+  the-gate
+```
+
+Then open http://localhost:8080. Note 8080, not 5173: in the container the API
+serves the interface itself.
+
+Takes will not play until a bucket is mounted, see below. Everything else is
+real, because the analysis lives in ClickHouse rather than in the image.
 
 One container: the API serves the built interface, so there is one origin and
 no CORS.
