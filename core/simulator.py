@@ -31,6 +31,10 @@ QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]
 # the conditioning rather than quote a number built on a handful of days.
 MIN_SAMPLES = 150
 
+# Going again on a position already lit still costs the reset: back to one,
+# props put back, a rehearsal. Charged on top of the take itself.
+RESET_SECONDS = 8 * 60
+
 DEFAULT_TRIALS = 10_000
 SEED = 20260816
 
@@ -45,6 +49,9 @@ class PendingSetup:
     extras_bucket: int
     dp_id: str
     label: str = ""
+    shot_size: str = ""
+    # Another take on a position already lit, rather than a new one to build.
+    retake: bool = False
 
 
 @dataclass
@@ -111,6 +118,29 @@ def _fetch(client, where: str, params: dict) -> tuple[list[float], int]:
     return list(row[0][0]), int(row[0][1])
 
 
+def retake_distribution(client, setup: PendingSetup) -> Distribution:
+    """How long going again costs when the camera is already where it needs to be.
+
+    A take, plus the reset before it. Read off the takes this crew has shot,
+    not guessed: on the studio's own record the median setup runs about an
+    hour and the median take a couple of minutes, and pricing a pickup as a
+    fresh setup is the difference between "grab it" and "come back for it".
+    """
+    row = client.query(
+        f"SELECT quantilesTDigest({', '.join(str(q) for q in QUANTILES)})"
+        f"(toFloat32(duration_s)), count() FROM {DB}.takes "
+        f"WHERE duration_s > 0 AND status = 'complete'",
+    ).result_rows
+    if not row or not row[0][1]:
+        return Distribution([600.0] * len(QUANTILES), 0, "no takes on record")
+
+    # The take itself is the small half. Resetting to the top — actors back to
+    # one, props reset, a rehearsal — is the rest, and it is the turnover the
+    # simulation already charges between setups.
+    takes = [float(q) + RESET_SECONDS for q in row[0][0]]
+    return Distribution(takes, int(row[0][1]), "a take, on a position already lit")
+
+
 def duration_distribution(client, setup: PendingSetup) -> Distribution:
     """Get a duration distribution, widening the conditioning if it is too thin.
 
@@ -118,7 +148,18 @@ def duration_distribution(client, setup: PendingSetup) -> Distribution:
     Quoting a distribution off six observations produces confident nonsense, so
     each fallback drops the least important condition.
     """
+    if setup.retake:
+        return retake_distribution(client, setup)
+
     ladder = [
+        ("dp_id = %(dp)s AND int_ext = %(ie)s AND day_night = %(dn)s "
+         "AND scene_type = %(st)s AND extras_bucket = %(eb)s "
+         "AND shot_size = %(ss)s",
+         "dp+int/ext+day/night+type+extras+framing"),
+        ("int_ext = %(ie)s AND day_night = %(dn)s AND scene_type = %(st)s "
+         "AND shot_size = %(ss)s",
+         "int/ext+day/night+type+framing"),
+        ("shot_size = %(ss)s", "framing alone"),
         ("dp_id = %(dp)s AND int_ext = %(ie)s AND day_night = %(dn)s "
          "AND scene_type = %(st)s AND extras_bucket = %(eb)s",
          "dp+int/ext+day/night+type+extras"),
@@ -133,6 +174,7 @@ def duration_distribution(client, setup: PendingSetup) -> Distribution:
     params = {
         "dp": setup.dp_id, "ie": setup.int_ext, "dn": setup.day_night,
         "st": setup.scene_type, "eb": setup.extras_bucket,
+        "ss": setup.shot_size or "MS",
     }
 
     for where, label in ladder:
@@ -201,12 +243,45 @@ def pending_setups(client, scene_id: str, completed_setup_ids: set[str] | None =
     done = completed_setup_ids or set()
     rows = client.query(
         f"SELECT setup_id, scene_id, scene_type, int_ext, day_night, "
-        f"extras_bucket, dp_id FROM {DB}.setups WHERE scene_id = %(s)s",
+        f"extras_bucket, dp_id, shot_size FROM {DB}.setups WHERE scene_id = %(s)s",
         parameters={"s": scene_id},
     ).result_rows
     return [
         PendingSetup(setup_id=r[0], scene_id=r[1], scene_type=r[2], int_ext=r[3],
-                     day_night=r[4], extras_bucket=int(r[5]), dp_id=r[6])
+                     day_night=r[4], extras_bucket=int(r[5]), dp_id=r[6],
+                     shot_size=r[7] or "")
+        for r in rows if r[0] not in done
+    ]
+
+
+def day_setups(client, production_id: str,
+               completed_setup_ids: set[str] | None = None) -> list[PendingSetup]:
+    """Every setup left in the day.
+
+    Making the day means the whole day. Simulating one scene and calling the
+    answer "the odds of making the day" was measuring a different thing from
+    the one on screen.
+
+    A setup with takes against it has been shot, and that is read off the
+    footage rather than assumed. The caller used to hand in a guess — the
+    first two thirds of the list — which counted finished work as work still
+    to do and drove the odds to nothing.
+    """
+    done = set(completed_setup_ids or set())
+    done |= {r[0] for r in client.query(
+        f"SELECT DISTINCT setup_id FROM {DB}.takes WHERE production_id = %(p)s",
+        parameters={"p": production_id},
+    ).result_rows}
+    rows = client.query(
+        f"SELECT setup_id, scene_id, scene_type, int_ext, day_night, "
+        f"extras_bucket, dp_id, shot_size FROM {DB}.setups WHERE production_id = %(p)s "
+        f"ORDER BY scene_id, setup_id",
+        parameters={"p": production_id},
+    ).result_rows
+    return [
+        PendingSetup(setup_id=r[0], scene_id=r[1], scene_type=r[2], int_ext=r[3],
+                     day_night=r[4], extras_bucket=int(r[5]), dp_id=r[6],
+                     shot_size=r[7] or "")
         for r in rows if r[0] not in done
     ]
 

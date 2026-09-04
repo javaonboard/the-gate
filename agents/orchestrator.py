@@ -18,8 +18,8 @@ from agents import compliance, historian, scout
 from agents.resilience import is_transient
 from api.events import Run, adk_callbacks, step
 from core.coverage import connect
-from core.gate import GateReport, build_report
-from core.simulator import pending_setups
+from core.gate import GateReport, build_report, production_of
+from core.simulator import day_setups
 from core.union_rules import Person
 
 load_dotenv()
@@ -45,7 +45,28 @@ class Trigger:
 
 INSTRUCTION = """You are the production desk on a film set. The 1st AD is
 standing in front of you and the crew is waiting to move the camera.
-"""
+
+You will be given evidence that has already been worked out:
+- what the scene needs and what is on the card
+- the odds of making the day, from ten thousand simulations
+- what each missing shot costs to grab now against what it costs to come back for
+- anything the scout found happening outside
+
+Your job is to give the call, in the fewest words that could change what they do.
+
+Rules:
+- Lead with GO or NO-GO. Never bury it.
+- If something is missing, say what, and give both prices. That comparison is
+  the whole decision.
+- Use the numbers you were given. Never produce one of your own — if you find
+  yourself estimating, you are doing the wrong job.
+- Speak like a person on a set, not a report. "You're short a single on Marcus.
+  Grab it — two grand tonight against thirty for a pickup day."
+- If everything is covered and the day holds, say so in one line and stop.
+- Refer to people by name. Lind, not dp_lind.
+
+You may call the crew for anything the evidence does not cover. The scout knows
+what is happening outside. The book knows what this crew has done before."""
 
 
 def crew_for(client, scene_id: str) -> list[Person]:
@@ -146,9 +167,12 @@ def gather_evidence(client, scene_id: str, now: datetime, call: datetime,
                 past,
             )
 
-    all_setups = pending_setups(client, scene_id)
-    done = {s.setup_id for s in all_setups[: (len(all_setups) * 2) // 3]}
-    remaining = [s for s in all_setups if s.setup_id not in done]
+    # What is left to shoot, read off the footage: a setup with takes against
+    # it has been shot. This used to call the first two thirds of the list
+    # done, which was a stand-in from before there was anything real to read —
+    # it counted finished work as pending and the odds of making the day came
+    # out at nothing however much of the card had been shot.
+    remaining = day_setups(client, production_of(client, scene_id))
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         waiting = [
@@ -165,7 +189,7 @@ def gather_evidence(client, scene_id: str, now: datetime, call: datetime,
     with step(run, "simulator", f"Running {trials:,} versions of the rest of the day"):
         report = build_report(
             client, scene_id, now=now, call=call, crew=crew,
-            next_call=next_call, completed_setup_ids=done, trials=trials,
+            next_call=next_call, trials=trials,
         )
 
     with step(run, "compliance", "Checking rest, meals and overtime") as s:

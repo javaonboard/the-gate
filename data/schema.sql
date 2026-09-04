@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS the_gate.setups
     extras_count        UInt16,
     extras_bucket       UInt8 MATERIALIZED multiIf(extras_count = 0, 0, extras_count <= 5, 1, extras_count <= 20, 2, extras_count <= 50, 3, 4),
     dp_id               LowCardinality(String),
-    crew_size           UInt16
+    crew_size           UInt16,
+    shot_size           LowCardinality(String) DEFAULT ''
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(shoot_day)
@@ -238,6 +239,11 @@ ORDER BY (location_id, ts);
 -- This is what the Monte Carlo simulator samples from.
 -- ---------------------------------------------------------------------------
 
+-- Framing is a dimension because it is a cost. Lighting a wide means lighting
+-- the whole space and clearing the floor of stands and cases; a close-up off a
+-- position already lit is a move-in. Without this the simulator priced an
+-- extreme close-up and an extreme long shot the same, and every missing shot
+-- came back costing an identical amount to grab.
 CREATE TABLE IF NOT EXISTS the_gate.setup_duration_stats
 (
     dp_id           LowCardinality(String),
@@ -245,11 +251,12 @@ CREATE TABLE IF NOT EXISTS the_gate.setup_duration_stats
     day_night       LowCardinality(String),
     scene_type      LowCardinality(String),
     extras_bucket   UInt8,
+    shot_size       LowCardinality(String),
     durations       AggregateFunction(quantilesTDigest(0.1, 0.25, 0.5, 0.75, 0.9), Float32),
     n               AggregateFunction(count)
 )
 ENGINE = AggregatingMergeTree
-ORDER BY (dp_id, int_ext, day_night, scene_type, extras_bucket);
+ORDER BY (dp_id, int_ext, day_night, scene_type, extras_bucket, shot_size);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS the_gate.setup_duration_mv
 TO the_gate.setup_duration_stats
@@ -260,8 +267,9 @@ SELECT
     day_night,
     scene_type,
     extras_bucket,
+    shot_size,
     quantilesTDigestState(0.1, 0.25, 0.5, 0.75, 0.9)(toFloat32(actual_duration_s)) AS durations,
     countState() AS n
 FROM the_gate.setups
 WHERE actual_duration_s > 0
-GROUP BY dp_id, int_ext, day_night, scene_type, extras_bucket;
+GROUP BY dp_id, int_ext, day_night, scene_type, extras_bucket, shot_size;

@@ -95,7 +95,31 @@ CONTINUITY_FLAGS = [
 ]
 
 
-def setup_minutes(rng, scene_type, int_ext, day_night, extras, dp_id):
+# What a camera position costs, by how much of the room is in it.
+#
+# Almost all of a setup is lighting, and how much there is to light is what
+# the framing decides. A wide shows the whole space, so the whole space has to
+# work and every stand, case and cable has to come off the floor. A close-up
+# shows a face: two sources, and the wide's lighting is mostly still good. An
+# insert of a hand or a prop can be grabbed against anything.
+#
+# Without this, framing and duration were independent — the generator picked a
+# shot size at random after the duration was drawn — and every framing came out
+# at 65 minutes. The gate then priced grabbing a close-up and grabbing a wide
+# identically, which is the one comparison the whole product is about.
+FRAMING_COST = {
+    "ELS": 1.45,   # establish the place: light everything, hide everything
+    "LS": 1.35,
+    "MLS": 1.15,
+    "MS": 1.00,    # the baseline a setup is quoted against
+    "MCU": 0.85,
+    "CU": 0.72,    # move in on a face; the room is already lit
+    "ECU": 0.55,   # an insert, grabbed almost anywhere
+}
+
+
+def setup_minutes(rng, scene_type, int_ext, day_night, extras, dp_id,
+                  shot_size="MS"):
     """Setup duration in minutes, lognormal, conditioned on context."""
     base = BASE_MINUTES[scene_type]
     if int_ext == "EXT":
@@ -104,6 +128,7 @@ def setup_minutes(rng, scene_type, int_ext, day_night, extras, dp_id):
         base *= 1.35
     base *= 1.0 + min(extras, 100) / 120.0
     base *= DPS[dp_id]
+    base *= FRAMING_COST.get(shot_size, 1.0)
     return max(6.0, rng.lognormvariate(0, 0.32) * base)
 
 
@@ -230,7 +255,14 @@ def generate(n_productions, first_start, seed):
                 for s in range(rng.randint(lo, hi)):
                     setup_id = f"{scene_id}_{chr(65 + s)}"
                     extras = rng.choices([0, 3, 12, 35, 80], [0.5, 0.2, 0.15, 0.1, 0.05])[0]
-                    mins = setup_minutes(rng, scene_type, int_ext, day_night, extras, dp_id)
+
+                    # A scene is covered widest first: the master establishes
+                    # the geography, then the camera moves in. So the first
+                    # setup of a scene is the wide one and the rest tighten,
+                    # which is also the order they get cheaper in.
+                    shot_size = SHOT_SIZES[min(s, len(SHOT_SIZES) - 1)]
+                    mins = setup_minutes(rng, scene_type, int_ext, day_night,
+                                         extras, dp_id, shot_size)
                     actual = int(mins * 60)
                     start_ts = clock
                     end_ts = clock + timedelta(seconds=actual)
@@ -240,7 +272,7 @@ def generate(n_productions, first_start, seed):
                         pid, day, scene_id, setup_id, start_ts, end_ts,
                         int(BASE_MINUTES[scene_type] * 60), actual, loc,
                         int_ext, day_night, scene_type, extras, dp_id,
-                        rng.randint(45, 110),
+                        rng.randint(45, 110), shot_size,
                     ])
 
                     lens = rng.choice(LENSES)
@@ -278,9 +310,12 @@ def generate(n_productions, first_start, seed):
                             flags = rng.sample(CONTINUITY_FLAGS, rng.randint(1, 2))
                         plate_setup = scene_type == "vfx" and s == 0
 
+                        # A setup is one camera position, so every take of
+                        # it is the same framing. Drawing this per take said a
+                        # crew reframed between takes without relighting.
                         out["take_analysis"].append([
                             pid, day, scene_id, setup_id, take_id,
-                            rng.choice(SHOT_SIZES),
+                            shot_size,
                             rng.choices(MOVEMENTS, MOVEMENT_WEIGHTS)[0],
                             rng.sample(cast, rng.randint(1, len(cast))),
                             rng.choice(["left", "right", "neutral"]),
@@ -302,7 +337,7 @@ def generate(n_productions, first_start, seed):
                                 f_score = round(focus * rng.uniform(0.35, 0.6), 3)
                             out["take_frames"].append([
                                 day, scene_id, setup_id, take_id, sec,
-                                f_score, expo, rng.choice(SHOT_SIZES), len(cast),
+                                f_score, expo, shot_size, len(cast),
                                 1 if sec == boom_at else 0,
                                 1 if rng.random() < 0.004 else 0,
                             ])
@@ -323,7 +358,7 @@ COLUMNS = {
     "setups": ["production_id", "shoot_day", "scene_id", "setup_id", "start_ts",
                "end_ts", "planned_duration_s", "actual_duration_s", "location_id",
                "int_ext", "day_night", "scene_type", "extras_count", "dp_id",
-               "crew_size"],
+               "crew_size", "shot_size"],
     "takes": ["production_id", "shoot_day", "scene_id", "setup_id", "take_no",
               "take_id", "camera_roll", "clip_name", "tc_start", "tc_end",
               "duration_s", "lens_mm", "t_stop", "nd", "iso", "fps",
@@ -361,10 +396,25 @@ def main():
     )
 
     if args.truncate:
+        # Only the studio library this script wrote. TRUNCATE took the table,
+        # which meant regenerating the synthetic history also deleted the demo
+        # day and anybody's own — they live in the same tables, and the only
+        # thing separating them is the production id.
+        made_here = "match(production_id, '^prod_[0-9]+$')"
         for table in COLUMNS:
-            client.command(f"TRUNCATE TABLE IF EXISTS {DB}.{table}")
+            has_pid = client.query(
+                f"SELECT count() FROM system.columns WHERE database = %(d)s "
+                f"AND table = %(t)s AND name = 'production_id'",
+                parameters={"d": DB, "t": table},
+            ).result_rows[0][0]
+            if has_pid:
+                client.command(
+                    f"ALTER TABLE {DB}.{table} DELETE WHERE {made_here}",
+                    settings={"mutations_sync": 2})
+            else:
+                client.command(f"TRUNCATE TABLE IF EXISTS {DB}.{table}")
         client.command(f"TRUNCATE TABLE IF EXISTS {DB}.setup_duration_stats")
-        print("truncated")
+        print("cleared the generated productions; anything real is untouched")
 
     data = generate(args.productions, date.fromisoformat(args.start), args.seed)
 

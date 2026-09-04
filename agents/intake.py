@@ -27,6 +27,14 @@ DB = os.environ.get("CLICKHOUSE_DATABASE", "the_gate")
 # the model will accept in parallel, not what this machine can do.
 AT_ONCE = int(os.environ.get("INTAKE_AT_ONCE", "4"))
 
+# Below this a shot is short enough to be one take, and looking again is a
+# model call spent to be told what we already know.
+SECOND_LOOK_SECONDS = 25.0
+
+# A take shorter than this is a fragment of one, not a take in its own right.
+MIN_TAKE_SECONDS = 3.0
+
+
 # Where footage lands. Locally a folder; deployed, a bucket prefix. Every
 # upload gets its own directory, so two people dropping "scene1.mp4" cannot
 # overwrite each other and a clip traces back to the upload it came from.
@@ -45,12 +53,30 @@ def upload_dir(workspace: str, kind: str) -> Path:
     return target
 
 
-def clip_path(take_id: str) -> Path:
+def joined_path(workspace: str, take_id: str) -> Path:
+    """Where a clip this workspace made for itself lives.
+
+    A day copied from another one shares its take ids and its footage. So a
+    workspace that joins two takes writes the result here, under its own name,
+    and never touches the file the other day is still playing.
+    """
+    return FOOTAGE_ROOT / "joined" / workspace / f"{take_id}.mp4"
+
+
+def clip_path(take_id: str, workspace: str | None = None) -> Path:
     """Find a clip wherever it was uploaded to.
 
     Older takes live directly in clips/; newer ones sit under the upload that
     brought them in. Checking the flat folder first keeps the seeded demo fast.
+
+    Anything this workspace joined for itself wins over both, because that is
+    the version of the take it decided on.
     """
+    if workspace:
+        mine = joined_path(workspace, take_id)
+        if mine.exists():
+            return mine
+
     direct = CLIPS_DIR / f"{take_id}.mp4"
     if direct.exists():
         return direct
@@ -161,10 +187,16 @@ def _run_clips(paths: list[Path], scene_id: str, setup_hint: str, run,
     gclient = gemini.client()
 
     row = ch.query(
-        f"SELECT production_id, location_id FROM {DB}.scenes WHERE scene_id = %(s)s",
+        f"SELECT production_id, location_id, int_ext, day_night "
+        f"FROM {DB}.scenes WHERE scene_id = %(s)s",
         parameters={"s": scene_id},
     ).result_rows
     production_id = row[0][0] if row else "prod_now"
+    # A setup is a camera position inside a scene, so it is in the same place
+    # at the same time by definition. It takes those from the scene rather
+    # than deciding again per take and disagreeing with its neighbours.
+    int_ext = row[0][2] if row else "INT"
+    day_night = row[0][3] if row else "DAY"
     shoot_day = date.today()
 
     # QC cannot call anything an anachronism without knowing the world the
@@ -208,16 +240,21 @@ def _run_clips(paths: list[Path], scene_id: str, setup_hint: str, run,
             parameters={"u": setup_id},
         ).result_rows[0][0]
         if not exists:
+            # The framing comes off the footage, because it is what the
+            # position costs: a wide means lighting the whole space, a
+            # close-up means moving in on one that is already lit.
             ch.insert("setups", [[
                 production_id, shoot_day, scene_id, setup_id,
                 datetime.now(), None, 2400, 0,
-                row[0][1] if row else "location", "EXT", "DAY",
+                row[0][1] if row else "location", int_ext, day_night,
                 "dialogue", 0, "dp_lind", 62,
+                analysis.get("shot_size", "") or "",
             ]], column_names=[
                 "production_id", "shoot_day", "scene_id", "setup_id",
                 "start_ts", "end_ts", "planned_duration_s",
                 "actual_duration_s", "location_id", "int_ext", "day_night",
-                "scene_type", "extras_count", "dp_id", "crew_size"])
+                "scene_type", "extras_count", "dp_id", "crew_size",
+                "shot_size"])
         take_no = ch.query(
             f"SELECT count() + 1 FROM {DB}.takes WHERE setup_id = %(u)s",
             parameters={"u": setup_id},
@@ -346,6 +383,54 @@ def starts_new_setup(what_changed: str) -> bool:
     return any(sign in (what_changed or "").lower() for sign in NEW_SETUP_SIGNS)
 
 
+def resets_within(shot: dict, source: Path, run) -> list[dict]:
+    """One shot, watched again on its own, in case it is several takes.
+
+    The first pass reads five minutes at a time, and a reset inside that — the
+    crew going again on the same action — is easy to read straight past. Asked
+    about a forty-second clip on its own it is an easy question, and it is the
+    same agent answering, so nothing new has to be trusted.
+
+    This was tried once before the previews carried sound and it split
+    everything it was shown, because without the calls of action and cut a
+    camera move is the only thing that looks like a boundary. With the audio
+    it leaves most clips alone and names its evidence when it does not.
+    """
+    from agents import editor
+    from data.split_takes import cut
+
+    if shot["seconds"] < SECOND_LOOK_SECONDS:
+        return [shot]
+
+    clip = source.parent / f"_look_{int(shot['starts_at'] * 100)}.mp4"
+    try:
+        cut(source, clip, shot["starts_at"], shot["ends_at"])
+        found = editor.find_shots(gemini.client(), clip)
+    except Exception:
+        return [shot]
+    finally:
+        clip.unlink(missing_ok=True)
+
+    inner = [f for f in found if f["seconds"] >= MIN_TAKE_SECONDS]
+    if len(inner) < 2:
+        return [shot]
+
+    run.publish("editor", "tool_result",
+                f"{shot.get('description') or 'one shot'}"[:32]
+                + f": {len(inner)} takes, not one")
+
+    # Timings come back relative to the clip, so they move back onto the film.
+    return [{
+        **shot,
+        "starts_at": shot["starts_at"] + f["starts_at"],
+        "ends_at": shot["starts_at"] + f["ends_at"],
+        "seconds": f["seconds"],
+        "what_changed": f["what_changed"] if i else shot["what_changed"],
+        "is_slate": bool(f.get("is_slate")),
+        "description": f.get("description") or shot.get("description", ""),
+    } for i, f in enumerate(inner)]
+
+
 def split_into_shots(source: Path, run) -> list[dict]:
     """Cut a long file into shots, deciding the boundaries by watching it.
 
@@ -364,6 +449,7 @@ A whole film is not a take. Frame-difference detection finds the obvious
                 f"Watching {source.name}, {total / 60:.0f} minutes")
 
     # cheap candidates first; the model never sees them, so it cannot simply
+    # agree with the detector, but nothing obvious is lost either
     try:
         marks = detector_shots(source, total)
         candidates = marks[1:-1]
@@ -382,6 +468,8 @@ A whole film is not a take. Frame-difference detection finds the obvious
     run.publish("editor", "tool_result",
                 f"{len(shots)} shots"
                 + (f", {slates} marked with a slate" if slates else ""))
+
+    shots = [piece for shot in shots for piece in resets_within(shot, source, run)]
 
     roll = f"U{uuid.uuid4().hex[:3].upper()}"
     made: list[dict] = []
@@ -408,6 +496,23 @@ A whole film is not a take. Frame-difference detection finds the obvious
     return made
 
 
+# Widest first: a long shot shows the room, an extreme close-up shows a hand.
+HOW_WIDE = ["ELS", "LS", "MLS", "MS", "MCU", "CU", "ECU"]
+
+
+def widest_per_label(clips: list[Path], analyses: dict) -> dict[str, Path]:
+    """One clip per location label — the one that shows the most of the place."""
+    best: dict[str, tuple[int, Path]] = {}
+    for clip in clips:
+        analysis = analyses.get(clip.stem, {})
+        label = (analysis.get("location_label") or "unsorted").strip().lower()
+        size = analysis.get("shot_size", "")
+        rank = HOW_WIDE.index(size) if size in HOW_WIDE else len(HOW_WIDE)
+        if label not in best or rank < best[label][0]:
+            best[label] = (rank, clip)
+    return {label: clip for label, (_, clip) in best.items()}
+
+
 def place_by_location(ch, run, workspace: str, clips: list[Path],
                        analyses: dict, minutes: float = 0.0) -> dict[str, str]:
     """Group shots into scenes by where they were filmed.
@@ -427,15 +532,23 @@ Nobody tells us where a scene starts and ends.
     raw = [(analyses.get(c.stem, {}).get("location_label") or "unsorted")
            for c in clips]
 
-    # a frame for each distinct label, so the decision is made on what the
+    # A frame for each label, so the decision is made on what the place looks
+    # like and not only on how it was described — but it has to be a frame
+    # that shows the place.
+    #
+    # This took the first clip carrying each label and grabbed a second in.
+    # On camera-card footage a second in is the clapperboard, and the first
+    # clip is as likely to be an insert as anything: two of the labels being
+    # placed came through as a close-up of a slate and a close-up of an axe.
+    # Asked whether those were the same room as a wide of a corridor, the
+    # model could only guess, and it guessed differently depending on how the
+    # prompt was worded. The widest shot carrying a label is the one that
+    # shows the room, and the middle of it is past the slate.
     from agents import continuity as _cont
+
     frames: dict[str, bytes] = {}
-    for clip in clips:
-        label = (analyses.get(clip.stem, {}).get("location_label")
-                 or "unsorted").strip().lower()
-        if label in frames:
-            continue
-        shot = _cont.grab_frame(clip, 1.0)
+    for label, clip in widest_per_label(clips, analyses).items():
+        shot = _cont.grab_frame(clip, max(1.0, duration_of(clip) * 0.45))
         if shot:
             frames[label] = shot
 
@@ -447,6 +560,24 @@ Nobody tells us where a scene starts and ends.
                     f"{len(set(raw))} descriptions, {len(set(same_place.values()))} "
                     f"actual places")
 
+    # A scene is one place at one time, so int/ext and day/night belong to the
+    # scene and not to the shot. Asked per clip, a dim interior came back NIGHT
+    # for two setups in a hallway and DAY for the third, which no call sheet
+    # would ever say. Every clip in the place votes; the scene takes the answer.
+    votes: dict[str, list[dict]] = {}
+    for clip in clips:
+        analysis = analyses.get(clip.stem, {})
+        label = (analysis.get("location_label") or "unsorted").strip().lower()
+        votes.setdefault(same_place.get(label, label), []).append(analysis)
+
+    def agreed(place: str, field: str, fallback: str) -> str:
+        said = [a.get(field) for a in votes.get(place, []) if a.get(field)]
+        if not said:
+            return fallback
+        # Ties go to whichever was shot first, so the same footage twice gives
+        # the same answer twice. set() iteration would not.
+        return max(said, key=lambda v: (said.count(v), -said.index(v)))
+
     placed: dict[str, str] = {}
     for clip in clips:
         analysis = analyses.get(clip.stem, {})
@@ -456,7 +587,9 @@ Nobody tells us where a scene starts and ends.
         if place not in existing:
             scene_id = f"{workspace}_sc{nxt:03d}"
             ch.insert("scenes", [[
-                workspace, scene_id, float(nxt), 12, "EXT", "DAY", "dialogue",
+                workspace, scene_id, float(nxt), 12,
+                agreed(place, "int_ext", "INT"),
+                agreed(place, "day_night", "DAY"), "dialogue",
                 place.replace(" ", "_")[:60],
                 [], analysis.get("scene_summary", "")[:180],
             ]], column_names=["production_id", "scene_id", "script_page",

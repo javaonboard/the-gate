@@ -59,18 +59,49 @@ RESPONSE_SCHEMA = {
         "vfx_chart_visible": {"type": "boolean"},
         "vfx_markers_visible": {"type": "boolean"},
         "has_vfx": {"type": "boolean"},
+        "int_ext": {
+            "type": "string",
+            "enum": ["INT", "EXT"],
+            "description": "Interior or exterior. A vehicle, a doorway seen "
+                           "from inside and a covered walkway are all INT.",
+        },
+        "day_night": {
+            "type": "string",
+            "enum": ["DAY", "NIGHT"],
+            "description": "The time of day the scene reads as, not when it "
+                           "was filmed. Judge by the light.",
+        },
     },
     "required": [
         "location_label", "scene_summary", "shot_size", "movement",
         "subjects", "subjects_count", "screen_direction", "is_dialogue",
         "focus_score", "exposure_score", "technical_faults",
+        "int_ext", "day_night",
     ],
 }
 
 PROMPT = """You are a script supervisor logging a take on a film set.
 
 Watch this clip and describe it factually. It is one continuous camera setup
-from a finished film.
+off the camera card, so it may open on a clapperboard before the take starts.
+
+Be precise about:
+- shot size, using standard film terms
+- camera movement
+- interior or exterior, and whether it reads as day or night
+- who is in frame and which way they are looking
+- whether the subject is sharp, and whether anything is technically wrong
+- whether this looks like a VFX plate rather than a performance take
+
+Whoever holds the clapperboard is crew marking the take, not someone in the
+scene. Do not list them as a subject.
+
+For location_label, use a short consistent phrase. Clips shot in the same place
+must get the same label, because these labels are used to group takes into
+scenes. A tight insert of an object is not evidence of the room around it, so
+label it for what it shows.
+
+Do not speculate about story. Report only what is visible.
 """
 
 
