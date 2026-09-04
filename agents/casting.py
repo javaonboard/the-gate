@@ -42,18 +42,32 @@ FACES_DIR = Path(os.environ.get(
 ))
 FACES_DIR.mkdir(parents=True, exist_ok=True)
 
-# multimodalembedding encodes the whole crop, so lighting and background
-# weigh as heavily as the face, measured on this footage, two shots of the
-# same person land at 0.31 while a man and a woman land at 0.33.
-SHORTLIST_DISTANCE = 0.60
+# multimodalembedding encodes the whole crop, so lighting and background weigh
+# as heavily as the face: measured on this footage, two shots of the same
+# person land at 0.31 while a man and a woman land at 0.33. Far too close to
+# decide anything on, which is why it only orders the shortlist that Gemini
+# then looks at.
 SHORTLIST_SIZE = 6
 
 FACE_PAD = 0.35          # crop this much around the detected box
 
 # A hooded or masked character is identified by the costume, not the face, so
 # the crop opens up to show it rather than the dark inside of a hood.
-COSTUME_PAD = 1.6
+#
+# Square, around the middle of the box, and capped. Two earlier shapes were
+# both wrong on this footage: padding evenly made a head box in a two-shot
+# four times wider and pulled the other actor in, and padding downward assumed
+# the person was standing up — the woman is on the floor for most of the film,
+# so down the frame ran across her instead of along her.
+COSTUME_GROW = 2.6       # how much bigger than the box the crop is
+COSTUME_MAX = 0.55       # never more than this much of the frame
+
+# 0.30 was the binding limit rather than the growth above it, so a gas
+# mask came back cropped to the mask and nothing else. Three shots of one
+# man in a hazmat suit then matched as three different people, because
+# the suit — the only thing identifying him — was outside the frame.
 MIN_FACE_PX = 48         # anything smaller is background, not a character
+FACE_PX = 384            # what a saved crop is scaled to
 
 
 PEOPLE_SCHEMA = {
@@ -72,8 +86,11 @@ PEOPLE_SCHEMA = {
                     "face_box": {
                         "type": "array",
                         "items": {"type": "integer"},
-                        "description": "Face bounding box as [y0, x0, y1, x1], "
-                                       "each 0-1000 relative to the image.",
+                        "description": "Where this person is, as "
+                                       "[y0, x0, y1, x1], each 0-1000 "
+                                       "relative to the image. The face if it "
+                                       "is visible, otherwise head and "
+                                       "shoulders, otherwise the whole person.",
                     },
                     "prominence": {
                         "type": "string",
@@ -84,9 +101,15 @@ PEOPLE_SCHEMA = {
                     "role": {
                         "type": "string",
                         "enum": ["cast", "crew"],
-                        "description": "crew if they are working on the film — "
-                                       "holding a slate, boom, meter, or "
-                                       "adjusting equipment. cast otherwise.",
+                        "description": "cast only if they are performing in "
+                                       "the scene. crew for everyone else on "
+                                       "the floor — holding a slate, boom or "
+                                       "meter, adjusting equipment or a prop, "
+                                       "standing watching, walking through "
+                                       "between takes, or a performer out of "
+                                       "costume waiting to go again. This is "
+                                       "raw footage off the camera card, so "
+                                       "the camera rolls through all of that.",
                     },
                     "face_clear": {
                         "type": "boolean",
@@ -114,11 +137,28 @@ PEOPLE_SCHEMA = {
     "required": ["people"],
 }
 
-PROMPT = """Find every person whose face is visible in this frame.
+PROMPT = """Find every person in this frame.
 
-For each one give a tight bounding box around the face as [y0, x0, y1, x1],
-each value 0-1000 relative to the image.
-"""
+Every person, not every face. A character in a gas mask, a hood or a helmet is
+a person. So is someone with their back to camera, and so are two people
+running up a staircase far from the lens. On a film set the costume is what
+identifies those characters, and a script supervisor tracks them by it all day.
+
+For each one give a bounding box as [y0, x0, y1, x1], each value 0-1000
+relative to the image: the face where you can see it, otherwise the head and
+shoulders, otherwise the whole person.
+
+Describe them by what would let you recognise them in a different shot — hair,
+clothing, build. Do not guess names or roles.
+
+Mark someone foreground if they are part of the action, background if they are
+a passer-by, a crowd member, or out of focus behind the subject.
+
+The camera rolls between takes as well as during them, so some frames show the
+crew resetting, someone walking through, or a performer with their costume half
+off. None of those people are in the film. Mark them crew.
+
+If nobody is in frame, return an empty list."""
 
 
 @dataclass
@@ -167,16 +207,27 @@ def crop_face(frame_png: bytes, box: list[int],
     if bw < MIN_FACE_PX or bh < MIN_FACE_PX:
         return None
 
-    pad = FACE_PAD if face_clear else COSTUME_PAD
-    px, py = bw * pad, bh * pad
-    left = max(0, int(x0 * w - px))
-    top = max(0, int(y0 * h - py))
-    right = min(w, int(x1 * w + px))
-    bottom = min(h, int(y1 * h + py))
+    cx, cy = (x0 + x1) / 2 * w, (y0 + y1) / 2 * h
+
+    if face_clear:
+        half_w, half_h = bw * (1 + FACE_PAD) / 2, bh * (1 + FACE_PAD) / 2
+    else:
+        # One square, so it does not matter which way up the person is.
+        half = min(max(bw, bh) * COSTUME_GROW, min(w, h) * COSTUME_MAX) / 2
+        half_w = half_h = half
+
+    left = max(0, int(cx - half_w))
+    top = max(0, int(cy - half_h))
+    right = min(w, int(cx + half_w))
+    bottom = min(h, int(cy + half_h))
     if right <= left or bottom <= top:
         return None
 
-    return image.crop((left, top, right, bottom)).resize((160, 160), Image.LANCZOS)
+    # Big enough to be looked at, not only matched against. The AD checking
+    # whether a take really is this character is the one person who can catch
+    # the model being wrong, and they cannot do it at thumbnail size.
+    return image.crop((left, top, right, bottom)).resize((FACE_PX, FACE_PX),
+                                                         Image.LANCZOS)
 
 
 _embedder = None
@@ -225,8 +276,9 @@ IDENTITY_SCHEMA = {
     "properties": {
         "same_as": {
             "type": "string",
-            "description": "The label of the matching known face, or NEW if this "
-                           "is someone not among them.",
+            "description": "The label of the matching known face; NEW if this "
+                           "is someone not among them; UNKNOWN if the picture "
+                           "shows too little of anybody to say.",
         },
         "confidence": {"type": "number"},
         "reason": {"type": "string"},
@@ -239,6 +291,28 @@ were described. The images after it are people already known, each labelled and
 described.
 
 Decide whether the first person is one of the labelled people, or someone new.
+
+Judge by what carries between shots — face, build, hair, and what they are
+wearing. Ignore lighting, angle, expression, focus and background; the same
+person looks very different between a wide shot and a close-up.
+
+Costume is strong evidence on a shoot day, because nobody changes mid-scene.
+Two people in the same costume are still two people if the faces differ.
+
+You will often be shown less of someone than last time — the back of a head,
+an over-the-shoulder, a pair of legs running upstairs, a hand. Seeing less of
+a person does not make them a different person. A day's work has a handful of
+cast in it, so when the costume and build agree and nothing contradicts them,
+it is somebody you already have.
+
+Some pictures show nothing that could identify anyone: a smear of motion blur,
+a pair of legs on a staircase, a hand on a door handle, the back of a head with
+no costume in frame. Answer UNKNOWN for those. Do not answer NEW — a person is
+plainly there, so the question is who, and nothing here says. Every UNKNOWN
+costs one sighting; every wrong NEW invents a cast member who then reads as
+missing every shot in the scene for the rest of the day.
+
+Answer with the matching label, or NEW, or UNKNOWN.
 """
 
 
@@ -311,6 +385,11 @@ def confirm_identity(client: genai.Client, face: Image.Image,
     same_as = str(answer.get("same_as", "NEW")).strip()
     if same_as in labels and float(answer.get("confidence", 0)) >= 0.6:
         return same_as
+    # Shown a blur, or legs, or a hand: somebody is there and there is no
+    # saying who. The caller records nothing, which loses one sighting. The
+    # alternative was a character made out of a pair of legs.
+    if same_as.upper() == "UNKNOWN":
+        return UNSURE
     return None
 
 
@@ -360,10 +439,13 @@ def shortlist(ch, production_id: str, embedding: list[float]
         parameters={"e": embedding, "p": production_id},
     ).result_rows
 
-    return [
-        (r[0], float(r[1])) for r in rows
-        if r[1] == r[1] and float(r[1]) <= SHORTLIST_DISTANCE
-    ]
+    # The distance orders the list, it does not veto it. This embedding is
+    # weak enough that two shots of one person and two different people land
+    # a hundredth apart, so using it as a gate meant a crop of someone's legs
+    # never reached the comparison and became a new character instead. A day
+    # has a handful of cast; comparing against the nearest few is cheap, and
+    # the one that can actually tell them apart is the model that looks.
+    return [(r[0], float(r[1])) for r in rows if r[1] == r[1]]
 
 
 def next_name(existing: int) -> str:
@@ -447,9 +529,18 @@ def can_identify(person: dict[str, Any]) -> bool:
 Not the same as a clear face. A character in a hazmat hood or a helmet has
     no visible face and is still one particular character, the costume is what
     identifies them, and a script supervisor tracks them by it perfectly well.
+
+    The size bar is there to drop passers-by, and asking it of everyone undid
+    the paragraph above: a gas mask gives no face to measure, and in a wide of
+    two people running upstairs neither head clears it. Both came back as
+    nobody on camera. Prominence is the question actually being asked, so
+    foreground answers it, and the size bar only settles the rest.
     """
-    return (bool(person.get("identifiable", True))
-            and big_enough(person.get("face_box", [])))
+    if not person.get("identifiable", True):
+        return False
+    if person.get("prominence") == "foreground":
+        return True
+    return big_enough(person.get("face_box", []))
 
 
 def analyse_take(client: genai.Client, ch, production_id: str, scene_id: str,
@@ -495,7 +586,7 @@ Two halves with very different rules, which is why `sightings` can be
 
         chosen = confirm_identity(client, face, faces, looks_like, described)
 
-        # Asked once and told "new", with a known face sitting right there , 
+        # Asked once and told "new", with a known face sitting right there,
         # ask again before inventing someone.
         if chosen is None and candidates and candidates[0][1] <= DOUBT_DISTANCE:
             chosen = confirm_identity(client, face, faces, looks_like, described)
