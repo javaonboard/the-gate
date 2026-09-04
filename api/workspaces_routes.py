@@ -53,8 +53,6 @@ def workspace_label(workspace_id: str) -> str | None:
     another tab, or another person. Treating that as a workspace left the
     interface open on nothing at all, with no way back to the chooser.
     """
-    if workspace_id == ws.DEMO:
-        return "The demo"
     ensure_table()
     rows = client().query(
         f"SELECT label FROM {DB}.workspaces FINAL WHERE workspace_id = %(w)s",
@@ -80,6 +78,7 @@ def list_workspaces(request: Request):
         SELECT w.workspace_id, w.label, w.kind, w.created_at, w.last_used,
                ifNull(s.n, 0) AS scenes, ifNull(t.n, 0) AS takes
         FROM {DB}.workspaces AS w FINAL
+        -- the demo has a row so it can carry a name; it is not one of yours
         LEFT JOIN (
             SELECT production_id, count() AS n FROM {DB}.scenes
             GROUP BY production_id
@@ -87,8 +86,10 @@ def list_workspaces(request: Request):
         LEFT JOIN (
             SELECT production_id, count() AS n FROM {DB}.takes GROUP BY production_id
         ) AS t ON t.production_id = w.workspace_id
+        WHERE w.workspace_id != %(demo)s
         ORDER BY w.last_used DESC
-        """
+        """,
+        parameters={"demo": ws.DEMO},
     ).result_rows
 
     demo = ch.query(
@@ -100,19 +101,10 @@ def list_workspaces(request: Request):
         parameters={"d": ws.DEMO},
     ).result_rows[0]
 
-    # Named after what is actually in it. It used to say "Tears of Steel",
-    # which stopped being true the moment the demo was rebuilt on other
-    # footage and nobody noticed.
-    places = [
-        r[0].replace("_", " ") for r in ch.query(
-            f"SELECT location_id FROM {DB}.scenes "
-            f"WHERE production_id = %(d)s AND location_id != 'nothing_yet' "
-            f"ORDER BY scene_id LIMIT 2",
-            parameters={"d": ws.DEMO},
-        ).result_rows
-    ]
-    demo_label = ("A day already shot: " + " and ".join(places)
-                  if places else "The demo")
+    # Named after the film it was seeded from, recorded at seed time. It used
+    # to be hardcoded to one film, which stopped being true the moment the
+    # demo was rebuilt on other footage.
+    demo_label = workspace_label(ws.DEMO) or "Demo"
 
     current = request.cookies.get(ws.COOKIE, "")
 

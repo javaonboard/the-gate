@@ -73,6 +73,30 @@ def take_in(film: str) -> None:
     run = bus.start(DEMO)
     ingest_film(source, DEMO, run)
     print("  footage taken in")
+    name_it(ch, given.stem)
+
+
+def name_it(ch, filename: str) -> None:
+    """Call the demo after the film it was made from.
+
+    "horror-10min" becomes "Horror". The chooser used to build a name out of
+    the scene list, which ran to a full line and told a visitor nothing they
+    could not see on the card.
+    """
+    import re
+
+    from api.workspaces_routes import ensure_table
+
+    words = re.split(r"[-_\s]+", filename)
+    keep = [w for w in words if not re.fullmatch(r"\d+\w*|v\d+|final|test", w.lower())]
+    label = " ".join(keep).strip().title() or "Demo"
+
+    ensure_table()
+    now = datetime.now()
+    ch.insert("workspaces", [[DEMO, label, "demo", now, now]],
+              column_names=["workspace_id", "label", "kind", "created_at",
+                            "last_used"])
+    print(f"  named       {label}")
 
 
 def demo_scenes(ch) -> list[tuple[str, str]]:
@@ -103,7 +127,9 @@ def set_goals(ch, scenes: list[tuple[str, str]]) -> None:
             continue
         for shot in wants:
             ch.insert("character_requirements", [[
-                scene_id, cc.SCENE_ROW, shot, 1, cc.SCENE_COST[shot],
+                # Nothing stored, so it is worked out from the crew of the
+                # day it is read on rather than the crew of the day it was set.
+                scene_id, cc.SCENE_ROW, shot, 1, 0,
                 datetime.now(),
             ]], column_names=["scene_id", "character_id", "shot_type",
                               "required", "recover_cost_usd", "updated_at"])
@@ -116,7 +142,8 @@ def where_it_stands(ch, scenes: list[tuple[str, str]]) -> None:
     print()
     for scene_id, place in scenes:
         rows = cc.matrix(ch, scene_id)
-        summary = cc.summarise(rows, cc.scene_shots(ch, scene_id))
+        summary = cc.summarise(rows, cc.scene_shots(ch, scene_id),
+                               seen=cc.people_seen(ch, scene_id))
         required += summary["required"]
         have += summary["have"]
         exposure += summary["exposure_usd"]

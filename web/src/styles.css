@@ -890,6 +890,26 @@ button.secondary.small {
 
 /* --- worth grabbing, one box per person ---------------------------------- */
 
+.grabs-lead {
+  margin: -6px 0 12px;
+  font-size: var(--body-sm);
+  color: var(--faint);
+}
+
+.grabs-rest {
+  margin: 12px 0 0;
+  font-size: var(--body-sm);
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+.grab-where {
+  margin-left: 7px;
+  font-style: normal;
+  font-size: var(--label-md);
+  color: var(--faint);
+}
+
 .grabs {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -1056,78 +1076,86 @@ button.linky {
 
 .badge[data-unjudged="true"] { color: var(--muted); background: var(--panel-2); }
 
-/* --- choosing a shoot day ------------------------------------------------ */
+/* --- choosing a shoot day ------------------------------------------------
+ *
+ * One question, asked once, and three answers stacked in the order people
+ * actually want them: the day that is already analysed, days of your own,
+ * then making a new one — folded away until it is asked for, because most
+ * arrivals have shot nothing yet. */
 
-.choose { max-width: 620px; margin: 8px auto; }
+.pick { max-width: 560px; margin: 24px auto; }
 
-.choose h1 {
-  font-size: 24px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  margin: 0 0 6px;
+.pick-head { margin-bottom: 24px; }
+
+.pick-head h1 {
+  font-size: var(--title-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
 }
 
-.choose-lead {
+.pick-head p {
   color: var(--muted);
-  font-size: 14px;
-  margin: 0 0 22px;
-  line-height: 1.5;
+  font-size: var(--body-md);
+  margin: 0;
 }
 
-.choose h2 {
-  font-size: 11px;
+.pick h2 {
+  font-size: var(--label-sm);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
-  font-weight: 650;
-  margin: 26px 0 10px;
+  font-weight: 600;
+  margin: 0 0 10px;
 }
 
-.choose-new {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 16px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  background: var(--panel-2);
-}
-
-.choose-new input {
-  flex: 1;
-  min-width: 200px;
-  font: inherit;
-  font-size: 14px;
-  padding: 8px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  background: var(--panel);
-  color: var(--text);
-}
-
-.choose-new input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-
-button.ghost {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  padding: 8px 14px;
-  cursor: pointer;
-}
-
-button.ghost:hover { border-color: var(--accent); color: var(--accent); }
-
-.choose-list { display: flex; flex-direction: column; gap: 8px; }
-
-.choose-card {
+/* The one thing a visitor can press without knowing anything. Filled, so it
+   reads as the primary action rather than as another item in a list. */
+.pick-demo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
-  padding: 13px 15px;
+  padding: 18px 20px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--accent-wash);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow .15s;
+}
+
+.pick-demo:hover { box-shadow: var(--shadow-lift); }
+
+.pick-demo-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.pick-demo-body b { font-size: var(--title-md); font-weight: 600; }
+.pick-demo-body small { font-size: var(--body-sm); color: var(--muted); }
+
+.pick-go {
+  font-size: var(--label-lg);
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.pick-yours { margin-top: 28px; }
+
+.pick-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.pick-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   background: var(--panel);
@@ -1135,25 +1163,82 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: box-shadow 0.15s, border-color 0.15s;
 }
 
-.choose-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-.choose-card.demo { border-style: dashed; }
+.pick-row-main:hover { background: var(--state-hover); border-color: var(--accent); }
+.pick-row-main b { font-size: var(--body-md); font-weight: 600; }
+.pick-row-main small { font-size: var(--body-sm); color: var(--faint); }
 
-.choose-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.choose-body b { font-size: 14.5px; font-weight: 600; }
-.choose-body small { font-size: 12px; color: var(--faint); }
-
-.choose-bin {
+.pick-bin {
+  border: none;
+  background: none;
   color: var(--faint);
   font-size: 18px;
   line-height: 1;
-  padding: 2px 7px;
-  border-radius: var(--radius-xs);
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
 }
 
-.choose-bin:hover { color: var(--nogo); background: var(--nogo-wash); }
+.pick-bin:hover { color: var(--nogo); background: var(--nogo-wash); }
+
+.pick-new { margin-top: 28px; }
+
+.pick-field {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.pick-field > span {
+  display: block;
+  font-size: var(--label-md);
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.pick-field input {
+  width: 100%;
+  font: inherit;
+  font-size: var(--body-md);
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.pick-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* How many people are on the clock, which is what turns hours into money. */
+.pick-crew { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.pick-crew button {
+  font: inherit;
+  font-size: var(--label-md);
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pick-crew button:hover { background: var(--state-hover); }
+.pick-crew button[data-active="true"] {
+  background: var(--accent-wash);
+  border-color: var(--accent-wash);
+  color: var(--accent);
+}
+
+.pick-why {
+  font-size: var(--label-md);
+  color: var(--faint);
+  line-height: 16px;
+  margin: -8px 0 18px;
+}
+
+.pick-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* --- the scene, opened up ------------------------------------------------ */
 
@@ -1424,21 +1509,31 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   outline-offset: -1px;
 }
 
-.dayscene[data-target="true"] { background: var(--panel-2); }
+.dayscene[data-target="true"] { background: var(--panel-3); }
 .dayscene[data-target="true"]:hover { outline: 1px dashed var(--accent); outline-offset: -1px; }
 
 /* --- day scenes: pickable, and each says what it still needs -------------- */
 
+/* A row is a place you can go. Open and hover were both --panel-2, so the
+   scene you were reading looked exactly like the scene under the pointer.
+   Selection gets the M3 treatment for a chosen list item — a filled container
+   and a bar down the leading edge — and hover drops to a state layer. */
 .dayscene {
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: var(--radius-xs);
-  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  padding: 1px 4px 1px 0;
+  border-left: 3px solid transparent;
 }
 
-.dayscene:hover { background: var(--panel-2); }
-.dayscene[data-open="true"] { background: var(--panel-2); }
+.dayscene:hover { background: var(--state-hover); }
+
+.dayscene[data-open="true"] {
+  background: var(--accent-wash);
+  border-left-color: var(--accent);
+}
+
 .dayscene[data-chosen="true"] { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .dayscene-tick { flex: none; accent-color: var(--accent); cursor: pointer; }
@@ -1459,7 +1554,17 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   text-align: left;
 }
 
-.dayscene[data-open="true"] .dayscene-name { font-weight: 600; }
+.dayscene-go {
+  flex: none;
+  width: 14px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--line);
+  transition: color .12s, transform .12s;
+}
+
+.dayscene:hover .dayscene-go { color: var(--faint); transform: translateX(2px); }
+.dayscene[data-open="true"] .dayscene-go { color: var(--accent); transform: none; }
 
 /* Two states in one rule, because writing them in two passes is how the text
    ended up the same colour as the fill it sat on.
@@ -1734,7 +1839,7 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   font-variant-numeric: tabular-nums;
 }
 
-.dayscene[data-open="true"] .dayscene-no { color: var(--accent); }
+.dayscene[data-open="true"] .dayscene-no { color: var(--accent); font-weight: 700; }
 
 .dayscene-body { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .dayscene-body b { font-size: 13px; font-weight: 550; }
@@ -1844,49 +1949,6 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
   background: var(--panel);
   color: var(--text);
   font-variant-numeric: tabular-nums;
-}
-
-/* --- what kind of shoot, asked when the day is made ---------------------- */
-
-.choose-crew {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
-  font-size: var(--body-sm);
-  color: var(--muted);
-}
-
-.choose-crew > span { margin-right: 4px; }
-
-.choose-crew button {
-  font: inherit;
-  font-size: var(--label-md);
-  font-weight: 500;
-  padding: 5px 14px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.choose-crew button:hover { background: var(--state-hover); }
-.choose-crew button[data-active="true"] {
-  background: var(--accent-wash);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.choose-crew small {
-  flex-basis: 100%;
-  font-size: var(--label-md);
-  color: var(--faint);
-  line-height: 16px;
 }
 
 .dayscene-newplace {
@@ -2211,3 +2273,144 @@ button.secondary.watch[data-live="true"] {
 @media (prefers-reduced-motion: reduce) {
   .watch-dot { animation: none; }
 }
+
+/* --- what the model saw, next to the take it saw it in ------------------- */
+
+.bd-saw {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+
+.bd-saw h5 {
+  margin: 0 0 8px;
+  font-size: var(--label-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.bd-saw ul { margin: 0 0 10px; padding-left: 18px; }
+.bd-saw li { font-size: var(--body-sm); color: var(--text); line-height: 1.6; }
+
+.bd-saw dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  font-size: var(--label-md);
+}
+
+.bd-saw dt { color: var(--faint); }
+.bd-saw dd {
+  margin: 0 12px 0 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- one character, big enough to check ---------------------------------- */
+
+.facecard {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.facecard-shot {
+  width: 240px;
+  height: 240px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  image-rendering: auto;
+}
+
+.facecard-takes { flex: 1; min-width: 200px; }
+
+.facecard-band { margin-bottom: 14px; }
+
+.facecard-band h5 {
+  margin: 0 0 5px;
+  font-size: var(--label-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.facecard-band ul { margin: 0; padding-left: 18px; }
+
+.facecard-band li {
+  font-size: var(--body-sm);
+  color: var(--text);
+  font-family: var(--mono);
+  line-height: 1.7;
+}
+
+.facecard-none,
+.facecard-count {
+  font-size: var(--body-sm);
+  color: var(--faint);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .facecard-shot { width: 100%; height: auto; aspect-ratio: 1; }
+}
+
+/* A face under a take opens the person, so it has to look pressable. */
+.bd-person img { cursor: pointer; }
+.bd-person img:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- two takes that are really one --------------------------------------- */
+
+.bd-tick {
+  flex: none;
+  width: 18px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.bd-tick:hover { color: var(--accent); }
+.bd-take[data-joining="true"] { background: var(--accent-wash); }
+.bd-take[data-joining="true"] .bd-tick { color: var(--accent); }
+
+.bd-joining {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-wash);
+  font-size: var(--body-sm);
+  color: var(--text);
+}
+
+.bd-joining > span { flex: 1; }
+
+.bd-move {
+  font: inherit;
+  font-size: var(--label-md);
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.daybar-problem {
+  font-size: var(--label-md);
+  color: var(--nogo);
+}
+
+.daybar .clock { cursor: pointer; }
+.daybar .clock:hover { color: var(--accent); }
