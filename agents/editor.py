@@ -79,7 +79,51 @@ PROMPT = """Watch this clip and say where each separate shot begins.
 
 A new shot is any point where the footage stops being one continuous piece of
 camera work:
-"""
+
+- a hard cut to another angle or another place
+- a dissolve or fade between two shots
+- the camera stopping and restarting — common in raw footage, where several
+  takes sit in one file
+- a clapperboard being held up, which marks the head of a take
+- a reset: the frame empties, nothing happens for a while, and then the same
+  action is performed again from the top. That is the next take, even though
+  the camera never stopped rolling. Not every take is slated
+- a whip pan that lands somewhere genuinely different, hiding a cut
+
+Listen as well as watch. The sound is often the only thing that separates two
+takes of the same action: somebody off camera calling action, cut, back to
+one, or going again; a clapperboard being struck; the same line or the same
+scream performed a second time. Two runs at a chase down one alley look alike
+and do not sound alike.
+
+Not all of that voice is a boundary. On a small shoot the director talks the
+whole way through — keep going, slower, again, hold there — and the actors
+work straight past it. Live direction over a running take does not end it.
+What ends it is the performance stopping: the actors come out of it, reset,
+and go from the top.
+
+Not a new shot:
+- the camera panning, tilting, tracking or zooming within one continuous take
+- the clapperboard being clapped and pulled out of frame. The camera is still
+  rolling. The board and the take it heads are one shot, and it starts at the
+  board — never return a shot that is only the board
+- the focus going soft, hunting, or losing the subject entirely and coming
+  back. An operator pulling focus through a struggle is one take badly shot,
+  not two takes
+- the camera being thrown about because the action is violent. Handheld work
+  on a fight or a chase swings hard and lands back on the same thing
+- someone walking in or out of frame
+- the lighting changing during a take
+- a subject moving closer to the lens
+
+When the picture falls apart for a second and comes back on the same action in
+the same place, the camera never stopped and nobody went again. That is one
+take. Ask what the people in it were doing, not what the lens was doing.
+
+Give the time in seconds from the start of THIS clip. The first shot starts
+at 0. Be precise about the timings — they are used to cut the file.
+
+If the whole clip is one continuous shot, return a single entry starting at 0."""
 
 
 def duration_of(path: Path) -> float:
@@ -95,12 +139,21 @@ def duration_of(path: Path) -> float:
 
 
 def preview(path: Path, start: float, length: float) -> bytes | None:
-    """A small, short piece of the file to show the model."""
+    """A small, short piece of the file to show the model.
+
+    With its sound. This used to strip the audio to keep the upload small,
+    which threw away the one cue a set actually uses to mark a take: somebody
+    calling action and cut, the clap, the same line delivered again. Two runs
+    at a chase down the same alley look alike and do not sound alike. Mono at
+    48k adds about a tenth to the file and settles boundaries that the picture
+    on its own cannot.
+    """
     out = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error",
          "-ss", f"{start:.2f}", "-t", f"{length:.2f}", "-i", str(path),
-         "-vf", f"scale=-2:{PREVIEW_HEIGHT}", "-an",
+         "-vf", f"scale=-2:{PREVIEW_HEIGHT}",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+         "-c:a", "aac", "-b:a", "48k", "-ac", "1",
          "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "-"],
         capture_output=True,
     )
@@ -136,7 +189,7 @@ def find_shots(client: genai.Client, path: Path, candidates: list[float] | None 
                on_step=None) -> list[dict[str, Any]]:
     """Every shot in the file, as the model sees it.
 
-    candidates are ffmpeg's proposals. They are not passed to the model , 
+    candidates are ffmpeg's proposals. They are not passed to the model, since
     telling it where to look would only make it agree, but they are merged
     afterwards, so an obvious hard cut is never lost because the model was
     looking elsewhere.
