@@ -24,6 +24,7 @@ type Scene = {
   takes: number;
   positions: number;
   people: number;
+  unnamed: number;
   judged: boolean;
   completeness: number;
   required: number;
@@ -43,6 +44,13 @@ type Today = {
     judged: boolean;
     exposure_usd: number;
   };
+};
+
+const hoursAndMinutes = (mins: number) => {
+  if (mins <= 0) return "none";
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
 };
 
 export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
@@ -192,10 +200,19 @@ export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
           {day.verdict}
         </span>
 
-        <span className="topstat">
+        {/* "Shots" means two things on a set — an angle the scene needs, and
+            a piece of footage you have — and this is the first. Read next to
+            a scene listing its takes it looked like the same count, so it
+            says which it is. */}
+        <span className="topstat"
+              title={"How much of what the day's scenes need is in the can, "
+                   + "and how many angles are still missing. Not the amount "
+                   + "of footage — a scene can have twenty takes and still be "
+                   + "short the wide."}>
           <b>{day.judged ? pct(day.completeness) : "—"}</b>
           <small>
-            of the day{day.judged && ` · ${day.have} of ${day.required} shots`}
+            of the day
+            {day.judged && ` · ${day.required - day.have} shots short`}
           </small>
         </span>
 
@@ -208,16 +225,58 @@ export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
 
         {call && (
           <>
-            <span className="topstat">
-              <b style={{ color: oddsColour(call.day.p_make_the_day) }}>
-                {pct(call.day.p_make_the_day)}
+            {/* This was two percentages, one at 100% and one at 0%, and
+                between them they told nobody anything. On the floor at half
+                five the question is how long is left and how much of it
+                fits. */}
+            <span className="topstat"
+                  title="Until the crew and cast are owed their rest before tomorrow's call. Shooting past it is allowed and costs double time.">
+              <b>{hoursAndMinutes(call.time_left.minutes)}</b>
+              <small>left today</small>
+            </span>
+
+            {call.time_left.short_by > 0 && (
+              <span className="topstat"
+                    title={"You are short " + call.time_left.short_by
+                         + " shots. Each takes as long as it takes this crew — "
+                         + "a close-up off a position already lit is a re-take, "
+                         + "a wide with nothing lit for it is a new setup. In "
+                         + "the time left, " + call.time_left.room_for
+                         + " of them go in, taking the ones that save the most "
+                         + "money first. The rest are a pickup day."}>
+                <b style={{ color: call.time_left.room_for < call.time_left.short_by
+                    ? "var(--warn)" : "var(--go)" }}>
+                  {call.time_left.room_for} of {call.time_left.short_by}
+                </b>
+                <small>you can still get today</small>
+              </span>
+            )}
+
+            <span className="topstat"
+                  title={"The latest you can wrap without eating into the rest "
+                       + "the crew and cast are owed before tomorrow's call — "
+                       + "ten hours for crew, twelve for performers. Wrapping "
+                       + "later is allowed and costs double time for every "
+                       + "invaded hour. Overtime is a separate thing and has "
+                       + "usually started well before this: time and a half "
+                       + "after eight hours on the clock, double after twelve."}>
+              <b style={{
+                color: new Date(call.day.median_wrap) > new Date(call.day.hard_stop)
+                  ? "var(--nogo)" : "var(--go)",
+              }}>
+                {clock(call.day.hard_stop)}
               </b>
-              <small>chance of finishing today</small>
+              <small>rest starts</small>
             </span>
-            <span className="topstat">
-              <b>{clock(call.day.hard_stop)}</b>
-              <small>latest we can finish</small>
-            </span>
+            {call.day.expected_penalty_usd > 0 && (
+              <span className="topstat"
+                    title="What the day is expected to cost in penalties if it runs as simulated.">
+                <b style={{ color: "var(--warn)" }}>
+                  {usd(call.day.expected_penalty_usd)}
+                </b>
+                <small>in penalties</small>
+              </span>
+            )}
           </>
         )}
 
@@ -267,11 +326,13 @@ export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
                 }
                 title={
                   s.judged
-                    ? `${s.have} of ${s.required} shots${
+                    ? `${s.have} of ${s.required} shots this scene needs${
                         s.exposure_usd
                           ? `, ${usd(s.exposure_usd)} to come back for`
                           : ""
                       }`
+                    : s.required > 0 && s.unnamed
+                    ? `${s.unnamed} on camera nobody could put a name to — a mask, or a wide where no face is readable. Their coverage cannot be worked out, so this scene has not been checked. Open it and say who they are.`
                     : "Nobody has said what this scene needs, so there was nothing to check it against. Open it and say what the director wanted."
                 }
               >
@@ -298,7 +359,12 @@ export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
                   </small>
                 </span>
                 <span className="dayscene-pct">
-                  {s.judged ? pct(s.completeness) : "no goal set"}
+                  {s.judged ? pct(s.completeness)
+                    : s.required > 0 && s.unnamed ? "who is this?"
+                    : "no goal set"}
+                </span>
+                <span className="dayscene-go" aria-hidden="true">
+                  {s.scene_id === openScene ? "‹" : "›"}
                 </span>
               </button>
 
@@ -313,7 +379,9 @@ export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
                       : "Say what the director wanted out of this scene"
                   }
                 >
-                  {s.judged ? "goal" : "Set the goal"}
+                  {s.judged ? "goal"
+                  : s.required > 0 && s.unnamed ? "Say who"
+                  : "Set the goal"}
                 </button>
               )}
             </div>
@@ -402,8 +470,3 @@ export function DayLine({ reloadKey, call, openScene, onScene, onChanged,
   );
 }
 
-function oddsColour(p: number) {
-  if (p >= 0.7) return "var(--go)";
-  if (p >= 0.4) return "var(--warn)";
-  return "var(--nogo)";
-}

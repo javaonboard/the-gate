@@ -70,8 +70,10 @@ def scenes(request: Request, response: Response):
         # Each scene carries its own state, so the AD can see which ones are
         # short without opening them.
         summary = cc.summarise(cc.matrix(ch, r[0]),
-                               cc.scene_shots(ch, r[0])) if r[5] else {
-            "characters": 0, "required": 0, "have": 0,
+                               cc.scene_shots(ch, r[0]),
+                               seen=cc.people_seen(ch, r[0])) if r[5] else {
+            "characters": 0, "seen": 0, "unnamed": 0,
+            "required": 0, "have": 0,
             "completeness": 0.0, "missing": [], "exposure_usd": 0,
         }
         out.append({
@@ -84,6 +86,7 @@ def scenes(request: Request, response: Response):
             "takes": r[5],
             "positions": r[6],
             "people": summary["characters"],
+            "unnamed": summary.get("unnamed", 0),
             "have": summary["have"],
             "required": summary["required"],
             "missing": len(summary["missing"]),
@@ -163,7 +166,8 @@ def coverage_matrix(scene_id: str, request: Request, response: Response):
             "takes": takes,
             "characters": cc.as_json(rows),
             "scene_shots": cc.scene_as_json(scene),
-            "summary": cc.summarise(rows, scene)}
+            "summary": cc.summarise(rows, scene,
+                                    seen=cc.people_seen(ch, scene_id))}
 
 
 class BandSetting(BaseModel):
@@ -277,7 +281,8 @@ def today(request: Request, response: Response):
             scenes, start=1):
         rows = cc.matrix(ch, scene_id)
         shots = cc.scene_shots(ch, scene_id)
-        summary = cc.summarise(rows, shots)
+        summary = cc.summarise(rows, shots,
+                               seen=cc.people_seen(ch, scene_id))
 
         required += summary["required"]
         have += summary["have"]
@@ -294,6 +299,7 @@ def today(request: Request, response: Response):
             "takes": takes,
             "positions": positions,
             "judged": summary["judged"],
+            "unnamed": summary.get("unnamed", 0),
             "completeness": summary["completeness"],
             "required": summary["required"],
             "have": summary["have"],
@@ -345,7 +351,7 @@ def set_scene_need(scene_id: str, shot: str, body: BandSetting,
     mine = ws.writable(request, response)
     scene_id = ws.scene_for(ch, mine, scene_id)
 
-    cost = body.recover_cost_usd or cc.SCENE_COST.get(shot, 20000)
+    cost = body.recover_cost_usd or 0
     ch.insert(
         "character_requirements",
         [[scene_id, cc.SCENE_ROW, shot, int(body.required), cost,
@@ -445,7 +451,8 @@ def breakdown(scene_id: str, request: Request, response: Response):
     are made once, from the same data the gate decides on.
     """
     ch = client()
-    scene_id = ws.scene_for(ch, ws.workspace_id(request, response), scene_id)
+    mine = ws.workspace_id(request, response)
+    scene_id = ws.scene_for(ch, mine, scene_id)
 
     scene = ch.query(
         f"""
@@ -460,7 +467,7 @@ def breakdown(scene_id: str, request: Request, response: Response):
 
     rows = cc.matrix(ch, scene_id)
     shots = cc.scene_shots(ch, scene_id)
-    summary = cc.summarise(rows, shots)
+    summary = cc.summarise(rows, shots, seen=cc.people_seen(ch, scene_id))
 
     # which take gives which character which band, the same judgment the
     gives: dict[str, list[dict]] = {}
@@ -509,9 +516,12 @@ def breakdown(scene_id: str, request: Request, response: Response):
     for r in ch.query(
         f"""
         SELECT a.take_id, a.setup_id, a.shot_size, a.movement,
-               t.duration_s, t.circled
+               t.duration_s, t.circled,
+               a.subjects, a.screen_direction, a.eyeline_target,
+               a.focus_score, a.exposure_score
         FROM {DB}.take_analysis AS a
-        LEFT JOIN {DB}.takes AS t USING (take_id)
+        LEFT JOIN {DB}.takes AS t
+               ON t.take_id = a.take_id AND t.scene_id = a.scene_id
         WHERE a.scene_id = %(s)s
         ORDER BY a.setup_id, a.take_id
         """,
@@ -523,7 +533,15 @@ def breakdown(scene_id: str, request: Request, response: Response):
             "shot_size": r[2], "shot_size_plain": SHOT_SIZES.get(r[2], r[2]),
             "movement": r[3], "movement_plain": MOVEMENTS.get(r[3], r[3]),
             "seconds": float(r[4] or 0), "circled": bool(r[5]),
-            "playable": clip_path(r[0]).exists(),
+            # What the Vision Agent actually saw, in its own words, so it can
+            # be read against the take playing beside it. Everything else on
+            # this row is a label; this is the reasoning behind the label.
+            "saw": list(r[6] or []),
+            "screen_direction": r[7] or "",
+            "eyeline": r[8] or "",
+            "focus": round(float(r[9] or 0), 2),
+            "exposure": round(float(r[10] or 0), 2),
+            "playable": clip_path(r[0], mine).exists(),
             "characters": in_take.get(r[0], []),
             "gives": gives.get(r[0], []),
             "problems": marks,

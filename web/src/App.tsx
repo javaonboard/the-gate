@@ -104,7 +104,15 @@ export default function App() {
         </div>
 
         <div className="right">
-          <DayBar hoursIn={hoursIn} onHoursIn={setHoursIn} />
+          <DayBar
+            hoursIn={hoursIn}
+            onHoursIn={setHoursIn}
+            // Let go of the slider and the numbers redo themselves. Without
+            // the crew: the odds, the wrap, the penalties and what is worth
+            // grabbing are all computed, so moving through the afternoon
+            // costs nothing. The button is still how you ask them to explain.
+            onCommit={(h) => { if (!busy) void start(h, false); }}
+          />
 
           <label
             className="toggle"
@@ -186,7 +194,19 @@ export default function App() {
             setScene(s);
           }}
           onIngested={(id) => follow(id)}
-          onChanged={() => setDataKey((n) => n + 1)}
+          // Everything that changes the day comes through here: a shot opted
+          // out of a scene, two takes joined, a take moved, two faces merged,
+          // the crew resized, the world set. All of them change what the day
+          // is short of and what it costs, so all of them redo the numbers.
+          //
+          // Without the crew: the verdict, the odds, the wrap and the money
+          // are computed, so this is a couple of seconds and no model calls.
+          // The panels alone used to reload and the call above them stayed as
+          // it was, so a shot you had just written off still read as missing.
+          onChanged={() => {
+            setDataKey((n) => n + 1);
+            if (!busy) void start(hoursIn, false);
+          }}
           onCleared={() => {
             // The data is gone; anything still selected refers to rows that
             // no longer exist, and re-rendering it looks like the reset failed.

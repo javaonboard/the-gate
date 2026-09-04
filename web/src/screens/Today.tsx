@@ -37,6 +37,18 @@ export function Today({ call, scene, dataKey, fresh, onScene,
   const setReloadKey = (fn: (n: number) => number) => setBumped(fn);
   const sceneId = scene?.scene_id ?? "";
 
+  // One computation, two questions. The gate covers the whole day, so the
+  // verdict and the money at the top are the day's. What is worth grabbing
+  // is not: it is what this scene is short of, because that is what the crew
+  // is standing in front of.
+  const worthIt = (call?.options ?? []).filter((o) => o.worth_it);
+  const here = sceneId
+    ? worthIt.filter((o) => o.scene_id === sceneId)
+    : worthIt;
+  const elsewhere = sceneId
+    ? worthIt.filter((o) => o.scene_id !== sceneId)
+    : [];
+
   return (
     <>
       {/* the day's call, with the scenes it is made of */}
@@ -82,11 +94,23 @@ export function Today({ call, scene, dataKey, fresh, onScene,
         />
       )}
 
-      {call && call.options.filter((o) => o.worth_it).length > 0 && (
+      {call && worthIt.length > 0 && (
         <section style={{ marginTop: 28 }}>
           <SectionTitle icon="grab">Worth grabbing before we move</SectionTitle>
+
+          {/* Before we move means before we leave this scene. The camera is
+              already up, the cast is dressed and on the floor, and that is
+              what makes these cheap. A missing shot somewhere else is not
+              something you grab before the move — going back for it IS the
+              move. So the boxes are this scene, and the rest is a footnote. */}
+          <p className="grabs-lead">
+            {!scene ? "across the day"
+              : here.length ? <>in <b>{scene.place}</b>, while the camera is still up</>
+              : <>nothing outstanding in <b>{scene.place}</b></>}
+          </p>
+
           <div className="grabs">
-            {groupByPerson(call.options.filter((o) => o.worth_it)).map((g) => (
+            {groupByPerson(here).map((g) => (
               <div className="grab" key={g.person}>
                 <div className="grab-head">
                   <b>{g.person}</b>
@@ -95,8 +119,14 @@ export function Today({ call, scene, dataKey, fresh, onScene,
                 <ul>
                   {g.shots.map((o, i) => (
                     <li key={i}>
-                      <span className="grab-shot">{o.shot_type}</span>
+                      <span className="grab-shot">
+                        {o.shot_type}
+                        {!scene && o.place && (
+                          <em className="grab-where">in {o.place}</em>
+                        )}
+                      </span>
                       <span className="grab-cost">
+                        {o.minutes ? `${o.minutes} min · ` : ""}
                         {usd(o.shoot_now_usd)} now · {usd(o.recover_later_usd)} later
                       </span>
                     </li>
@@ -109,11 +139,27 @@ export function Today({ call, scene, dataKey, fresh, onScene,
               </div>
             ))}
           </div>
+
+          {elsewhere.length > 0 && (
+            <p className="grabs-rest">
+              {elsewhere.length} {here.length ? "more " : ""}worth grabbing
+              elsewhere today, saving{" "}
+              {usd(elsewhere.reduce((n, o) => n + o.saving_usd, 0))} — but that
+              means going back, which is the move you are deciding about.
+            </p>
+          )}
         </section>
       )}
 
       {sceneId && (
-        <Breakdown sceneId={sceneId} reloadKey={reloadKey} call={call} />
+        <Breakdown
+          sceneId={sceneId}
+          reloadKey={reloadKey}
+          call={call}
+          // Joining two takes changes the coverage, so everything that reads
+          // from it has to be told, not just this panel.
+          onJoined={() => { setReloadKey((n) => n + 1); onChanged(); }}
+        />
       )}
 
       {sceneId && (

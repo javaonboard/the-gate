@@ -114,8 +114,8 @@ def _matches(req: Requirement, take: Take, cast_size: int) -> bool:
     """Does this take satisfy this requirement?
 
     Matching is by framing and how many people are in shot, because that is what
-    an editor is actually looking for. Subject identity is deliberately loose , 
-    the Vision Agent describes people rather than naming them.
+    an editor is actually looking for. Subject identity is deliberately loose,
+    because the Vision Agent describes people rather than naming them.
     """
     if req.is_vfx_plate:
         return take.subjects_count == 0 and take.band == "wide"

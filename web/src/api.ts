@@ -14,6 +14,9 @@ export type Requirement = {
 export type Option = {
   shot_type: string;
   subject: string;
+  scene_id: string;
+  place: string;
+  minutes: number;
   shoot_now_usd: number;
   recover_later_usd: number;
   saving_usd: number;
@@ -36,6 +39,13 @@ export type GateCall = {
     takes: number;
     exposure_usd: number;
     requirements: Requirement[];
+  };
+  // How long until the crew are owed their rest, and how many of the shots
+  // you are short will fit in it.
+  time_left: {
+    minutes: number;
+    room_for: number;
+    short_by: number;
   };
   day: {
     p_make_the_day: number;
