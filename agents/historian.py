@@ -171,11 +171,31 @@ TOOLS = [
 # --- the agent --------------------------------------------------------------
 
 INSTRUCTION = """You keep the production records for a studio. You have watched
-eighteen productions over four years, every setup, every take, who was shooting
+eighteen productions over four years — every setup, every take, who was shooting
 and how long it took.
 
 Answer from the records, never from impression. Use the tools.
-"""
+
+How to answer:
+- Give the typical time and the slow-day time, not a single number. A shoot day
+  is ruined by the tail, not the average.
+- Always say how many setups the answer is based on. If it is thin, say so
+  plainly rather than sounding confident.
+- Refer to people by name, not by id — dp_lind is Lind.
+- Keep it to a couple of sentences unless asked for the breakdown.
+
+If a question needs data the typed tools do not cover, query the cluster
+directly through the ClickHouse tools and explain what you looked at.
+
+The tables you can reach are curated views, not the raw record:
+  scene_status     one row per scene — where, how much shot, who is in it
+  take_log         every take, with its framing, focus and any problems
+  dp_pace          how long each DP takes, by conditions
+  person_coverage  which framings exist of which person, per scene
+  world_log        what was happening outside, with sources
+
+They are read-only and capped. Prefer them over clever SQL — they already
+carry the definitions everyone else in the system uses."""
 
 
 # ClickHouse Cloud hosts a managed MCP server.
@@ -185,7 +205,7 @@ MANAGED_MCP_URL = "https://mcp.clickhouse.cloud/mcp"
 def mcp_toolset(mode: str | None = None):
     """The ClickHouse MCP connection, managed or self-hosted.
 
-    mode: "managed" for ClickHouse Cloud's hosted server (OAuth, interactive , 
+    mode: "managed" for ClickHouse Cloud's hosted server (OAuth, interactive;
     use locally and for the demo), "local" for the self-hosted server (bearer
     token, works unattended, use when deployed). Defaults to CLICKHOUSE_MCP_MODE.
     """

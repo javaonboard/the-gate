@@ -1,7 +1,8 @@
 """The rules must run before anything is said about them.
 
-Asked "roughly what does overtime cost us", a model will answer from memory , 
-measured: with AUTO it made no tool call and started estimating.
+Asked "roughly what does overtime cost us", a model will answer from memory.
+Measured: with AUTO it made no tool call at all and started estimating, and the
+number it produced is one the 1st AD would have acted on.
 """
 
 from datetime import datetime
