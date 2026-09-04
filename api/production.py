@@ -1,6 +1,6 @@
 """The day itself: when it starts, who is on it, what world it is set in.
 
-Everything here is a fact about the production rather than about the footage , 
+Everything here is a fact about the production rather than about the footage:
 what somebody tells the system, which the rest of it is then judged against.
 The crew is the multiplier on every figure the day produces; the world is what
 makes an anachronism an anachronism.
@@ -9,7 +9,7 @@ makes an anachronism an anachronism.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
@@ -28,6 +28,37 @@ class World(BaseModel):
     notes: str = ""
 
 
+def plan_for(ch, production_id: str) -> tuple[datetime, datetime, date]:
+    """When this day starts and when it is meant to end.
+
+    One reader for both the banner and the simulation. They used to work it out
+    separately — the banner from this table, the gate from a call time written
+    into the code — so the clock on screen and the clock being simulated were
+    hours apart, and "the latest we can finish" was derived from a time nobody
+    had set.
+    """
+    rows = ch.query(
+        f"""
+        SELECT call_time, sunset, shoot_day
+        FROM {DB}.shoot_days WHERE production_id = %(p)s
+        ORDER BY shoot_day DESC LIMIT 1
+        """,
+        parameters={"p": production_id},
+        # Read your own write. The day is set and read back a moment later,
+        # and a replica that had not caught up returned nothing — which this
+        # function then quietly answered with a seven o'clock default, so a
+        # call time you had just typed came back as one you had not.
+        settings={"select_sequential_consistency": 1},
+    ).result_rows
+    if rows:
+        return rows[0][0], rows[0][1], rows[0][2]
+
+    # Nothing set yet: a plain twelve-hour day starting at seven.
+    day = date.today()
+    call_time = datetime.combine(day, datetime.min.time()) + timedelta(hours=7)
+    return call_time, call_time + timedelta(hours=12), day
+
+
 @router.get("/api/day")
 def get_day(request: Request, response: Response):
     """When the day starts and ends.
@@ -37,21 +68,7 @@ def get_day(request: Request, response: Response):
     """
     ch = client()
     mine = ws.read_from(ch, ws.workspace_id(request, response))
-    rows = ch.query(
-        f"""
-        SELECT call_time, sunset, shoot_day
-        FROM {DB}.shoot_days WHERE production_id = %(p)s
-        ORDER BY shoot_day DESC LIMIT 1
-        """,
-        parameters={"p": mine},
-    ).result_rows
-
-    if rows:
-        call_time, sunset, day = rows[0]
-    else:
-        day = date.today()
-        call_time = datetime.combine(day, datetime.min.time()) + timedelta(hours=7)
-        sunset = call_time + timedelta(hours=12)
+    call_time, sunset, day = plan_for(ch, mine)
 
     return {
         "shoot_day": str(day),
@@ -78,16 +95,26 @@ def set_day(body: DayPlan, request: Request, response: Response):
 
     ch.command(
         f"ALTER TABLE {DB}.shoot_days DELETE WHERE production_id = %(p)s",
-        parameters={"p": mine}, settings={"mutations_sync": 1},
+        # Waited on one replica, so the delete could land after the row that
+        # replaces it and eat it. The day then read back as the seven o'clock
+        # default, and setting a call time looked like it had been refused.
+        parameters={"p": mine}, settings=DONE_BEFORE_REPLYING,
     )
     scenes = [r[0] for r in ch.query(
         f"SELECT scene_id FROM {DB}.scenes WHERE production_id = %(p)s",
         parameters={"p": mine},
     ).result_rows]
 
+    # Stored as the clock on the wall, which is the only clock a call sheet
+    # has. Handed a naive datetime the driver reads it as local and converts
+    # it to the server's UTC, so a midday call went in as five in the evening
+    # — and the simulation then ran the wrong five hours of the day. Marking
+    # it UTC makes the conversion a no-op and the time comes back as typed.
+    at_utc = [t.replace(tzinfo=timezone.utc) if t else None
+              for t in (call_time, wrap_time, call_time - timedelta(minutes=45))]
+
     ch.insert("shoot_days", [[
-        mine, day, "main", "set", call_time, None,
-        call_time - timedelta(minutes=45), wrap_time, scenes,
+        mine, day, "main", "set", at_utc[0], None, at_utc[2], at_utc[1], scenes,
     ]], column_names=["production_id", "shoot_day", "unit", "location_id",
                       "call_time", "wrap_time", "sunrise", "sunset",
                       "planned_scenes"])

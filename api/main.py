@@ -26,10 +26,12 @@ from pydantic import BaseModel
 from agents.orchestrator import Trigger, run_gate
 from api.footage import router as footage_router
 from api.people import router as people_router
-from api.production import router as production_router
+from api.production import plan_for, router as production_router
 from api.scenes import router as scenes_router
+from api.takes import router as takes_router
 from api.workspaces_routes import router as workspaces_router, workspace_label
 from api import workspace as ws
+from core.gate import production_of
 from api.events import bus, sse
 from api.labels import AGENTS, GLOSSARY, MOVEMENTS, SHOT_SIZES, person_label
 from core.coverage import connect
@@ -75,6 +77,7 @@ def session(request: Request):
 app.include_router(workspaces_router)
 app.include_router(production_router)
 app.include_router(scenes_router)
+app.include_router(takes_router)
 app.include_router(people_router)
 app.include_router(footage_router)
 
@@ -107,13 +110,21 @@ def client():
 
 async def _do_gate(run, scene_id: str, hours_in: float, use_agent: bool,
                    trigger: str):
-    call = datetime(2026, 8, 16, 7, 0)
+    # The day's own clock, not one written into the code. Everything the call
+    # says about time hangs off this: how much of the day is left, the latest
+    # wrap that breaks no rule, what overtime a delay costs. It used to start
+    # from a fixed seven o'clock while the banner showed whatever call the
+    # production had set, so the hours on screen and the hours being simulated
+    # were different hours.
+    call, wrap, _ = plan_for(client(), production_of(client(), scene_id))
     try:
         result = await run_gate(
             scene_id,
             now=call + timedelta(hours=hours_in),
             call=call,
-            next_call=call + timedelta(days=1, hours=1),
+            # Tomorrow's call is the same call, a day on. Turnaround is
+            # measured from tonight's wrap to it.
+            next_call=call + timedelta(days=1),
             run=run,
             trigger=Trigger(trigger),
             use_agent=use_agent,
@@ -183,10 +194,25 @@ def serialise(report) -> dict[str, Any]:
             "missing": [
                 {"character_id": m.character_id, "person": m.person,
                  "band": m.band, "label": m.label,
-                 "describe": m.describe,
+                 "describe": m.describe, "scene_id": m.scene_id,
+                 "place": m.place,
                  "recover_cost_usd": m.recover_cost_usd}
                 for m in report.coverage.missing()
             ],
+        },
+        # How long is left and how much of it fits.
+        #
+        # This was two percentages — one for finishing the schedule, one for
+        # getting everything you are short — sitting next to each other at
+        # 100% and 0%. Both were true and neither told anyone what to do.
+        # Standing on the floor at half five the question is how long you have
+        # and how many of the missing shots you can get in it.
+        "time_left": {
+            "minutes": round(report.minutes_left),
+            "room_for": report.room_for,
+            # The same gap the coverage line shows, so "10 short" up there
+            # and "2 of 10" here are plainly the same ten shots.
+            "short_by": len(report.coverage.missing()),
         },
         "day": {
             "p_make_the_day": round(b.p_make_the_day, 4),
@@ -202,6 +228,11 @@ def serialise(report) -> dict[str, Any]:
                 "shot_type": o.requirement.label,
                 "subject": o.requirement.person,
                 "describe": o.requirement.describe,
+                "scene_id": o.requirement.scene_id,
+                "place": o.requirement.place,
+                # How long it takes, so "there is room for three" can be
+                # checked rather than believed.
+                "minutes": round(o.minutes),
                 "shoot_now_usd": round(o.shoot_now_usd),
                 "recover_later_usd": o.recover_later_usd,
                 "saving_usd": round(o.saving_usd),
@@ -336,7 +367,8 @@ def scene_takes(scene_id: str):
                a.screen_direction, a.focus_score, a.exposure_score,
                a.continuity_flags, t.duration_s, t.circled
         FROM {DB}.take_analysis AS a
-        LEFT JOIN {DB}.takes AS t USING (take_id)
+        LEFT JOIN {DB}.takes AS t
+               ON t.take_id = a.take_id AND t.scene_id = a.scene_id
         WHERE a.scene_id = %(s)s
         ORDER BY a.setup_id, a.take_id
         """,
