@@ -76,13 +76,13 @@ async def upload_footage(scene_id: str, request: Request, response: Response,
 
 
 @router.get("/api/takes/{take_id}/video")
-def take_video(take_id: str):
+def take_video(take_id: str, request: Request, response: Response):
     """The clip itself, so a take can be watched where it is listed.
 
     FileResponse answers range requests, which is what lets the player seek
     rather than downloading the whole take before it will play.
     """
-    path = clip_path(take_id)
+    path = clip_path(take_id, ws.workspace_id(request, response))
     if not path.exists():
         raise HTTPException(status_code=404, detail="No clip for that take")
     return FileResponse(path, media_type="video/mp4", filename=path.name)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FaceCard } from "./FaceCard";
 import { usd } from "../api";
 import { SceneGoal } from "./SceneGoal";
 import { WhoIsIn } from "./WhoIsIn";
@@ -66,6 +67,9 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [merging, setMerging] = useState<string | null>(null);
+  // Clicking a face used to start a merge, which is the rarer thing to want.
+  // It opens the person instead, and the merge starts from inside.
+  const [looking, setLooking] = useState<string | null>(null);
   const [goal, setGoal] = useState(false);
   const [who, setWho] = useState(false);
 
@@ -266,10 +270,10 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
                     ? "Click another face to say they are the same person"
                     : merging
                       ? `Same person as the one you picked? Click to merge.`
-                      : "Click if this face is really someone already listed"
+                      : "Click to see them bigger, and every take they are in"
                 }
                 onClick={() =>
-                  merging ? mergeInto(row.character_id) : setMerging(row.character_id)
+                  merging ? mergeInto(row.character_id) : setLooking(row.character_id)
                 }
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.visibility = "hidden";
@@ -357,6 +361,21 @@ export function CastMatrix({ sceneId, sceneName, reloadKey, onChanged }: {
           }}
         />
       )}
+
+      {looking && (() => {
+        const row = data.characters.find((c) => c.character_id === looking);
+        return row ? (
+          <FaceCard
+            name={row.name}
+            faceUri={row.face_uri}
+            appearances={row.appearances}
+            cells={row.cells}
+            bandLabel={data.band_label}
+            onClose={() => setLooking(null)}
+            onMerge={() => { setMerging(looking); setLooking(null); }}
+          />
+        ) : null;
+      })()}
 
       {merging && (
         <div className="merge-hint">
