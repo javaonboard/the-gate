@@ -71,7 +71,22 @@ QC_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "category": {"type": "string", "enum": list(CATEGORIES)},
-                    "severity": {"type": "string", "enum": SEVERITIES},
+                    "severity": {
+                        "type": "string",
+                        "enum": SEVERITIES,
+                        "description":
+                            "blocking only if the take cannot be used at all "
+                            "and has to be shot again — a crew member in "
+                            "shot, a boom in frame, the subject never in "
+                            "focus, a phone on a medieval table. warning if "
+                            "an editor would notice and work around it. note "
+                            "for anything else worth knowing. "
+                            "Hard camera movement, focus drifting and coming "
+                            "back, and the crew calling direction over a "
+                            "running take are how a handheld fight is shot. "
+                            "They are warnings at most. Calling them blocking "
+                            "throws away the take the director wanted.",
+                    },
                     "what": {
                         "type": "string",
                         "description": "Plainly what is wrong, as a person would say it.",
@@ -99,7 +114,52 @@ def build_prompt(period: str, setting: str, notes: str = "") -> str:
     extra = f"Also: {notes}" if notes else ""
     return f"""You are checking a take before the camera moves on. Find anything
 that would stop an editor using it.
-"""
+
+THE WORLD THIS IS SET IN
+Period:  {period or "present day"}
+Setting: {setting or "a contemporary setting"}
+{extra}
+
+Anything visible that could not exist in that world is a problem, however small
+and however far into the background. This is the most valuable thing you can
+find: it costs nothing to fix while the camera is still up, and cannot be fixed
+once the set is struck.
+
+Work through three passes.
+
+1. IS ANYTHING FROM THE CREW VISIBLE?
+   A person, a light stand, a boom, a cable, sandbags, tape marks on the floor,
+   a shadow cast by a microphone, the camera or an operator reflected in glass,
+   a mirror, a window, a car door, someone's glasses.
+
+2. DOES EVERY OBJECT BELONG IN THIS WORLD?
+   Go across the frame object by object, including the background and the very
+   edges. A disposable coffee cup, a plastic bottle, a wristwatch, trainers, a
+   zip, a phone, a wheelie bin, a parked car, road markings, an aerial, a
+   satellite dish, a modern shopfront, a printed logo, a light switch, a power
+   socket. Ask of each one: could this exist in this period and this place?
+   Say exactly what it is and exactly where, so someone can walk over and move
+   it.
+
+3. IS IT TECHNICALLY USABLE?
+   Is the intended subject genuinely sharp. Is the exposure recoverable. Any
+   flicker, banding or rolling shutter. Is anyone cut off badly or obstructed.
+   Is anyone looking down the lens.
+
+Rules:
+- blocking means the take genuinely cannot be used: a crew member in shot, an
+  object that could not exist, the subject never in focus at all.
+- warning means usable, but worth another take if there is time.
+- A fight or a chase is shot handheld. The camera swings hard, the focus goes
+  and comes back, and the director calls instructions over the top while the
+  actors work through it. That is the take they wanted, not a fault in it.
+  Note it if it is worth knowing; never block on it.
+- Do not invent problems. Most takes are clean, and a clean take must come back
+  with an empty list and usable = true. A false alarm costs a take nobody needed.
+- Judge only what you can actually see.
+
+Be specific. "A white paper cup on the table, left of the actress" is useful.
+"Possible continuity issue" is worthless."""
 
 
 WORLD_SCHEMA = {
@@ -130,7 +190,16 @@ world it is set in.
 
 Judge from what is actually visible: architecture, clothing, vehicles,
 technology, signage, lighting. A production designer chose all of it.
-"""
+
+Give:
+- the period, as specifically as the frames support
+- the setting, in a few words
+- one sentence on what would look out of place — the things a props or wardrobe
+  department would have to keep out of shot
+
+Be careful with science fiction: futuristic technology in a present-day street
+means near-future, not the far future. If the frames genuinely do not say, use
+"present day" and a low confidence."""
 
 
 def infer_world(client: genai.Client, frames: list[bytes]) -> dict[str, Any]:
@@ -232,7 +301,14 @@ INSTRUCTION = """You check footage before the crew moves on.
 You are looking for the thing nobody noticed. A coffee cup on a medieval table,
 a crew member reflected in a window, a boom dipping into frame. These cost
 nothing to fix while the camera is still up and cannot be fixed afterwards.
-"""
+
+When you report:
+- Lead with whether the take is usable.
+- Say exactly what and exactly where, so someone can go and look.
+- Separate what blocks the take from what merely bothers you.
+- If it is clean, say so in a few words. Do not manufacture concerns.
+
+You are the last person to see this before it goes."""
 
 
 def build_agent(callbacks: dict | None = None):
