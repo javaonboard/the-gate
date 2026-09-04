@@ -79,15 +79,24 @@ def writable(request: Request, response: Response | None = None) -> str:
     The demo is shared, every visitor sees the same film in it, so changing
     it would change what everyone else sees. The chooser offers a copy of it
     for anyone who wants to work on it.
+
+    Except for whoever runs the thing. The demo is a curated day — somebody
+    has to be able to look at it and say those two takes are one take, and
+    that is the same person who seeded it. Off unless DEMO_EDITABLE is set,
+    so it is on at a desk and off wherever this is deployed.
     """
     mine = workspace_id(request, response)
-    if mine == DEMO:
+    if mine == DEMO and not demo_editable():
         raise HTTPException(
             status_code=409,
             detail="The demo is read-only. Start your own day, or take a copy "
                    "of the demo, to make changes.",
         )
     return mine
+
+
+def demo_editable() -> bool:
+    return os.environ.get("DEMO_EDITABLE", "").lower() in ("1", "true", "yes")
 
 
 def has_own_copy(ch, workspace: str) -> bool:
