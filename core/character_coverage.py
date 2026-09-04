@@ -38,7 +38,22 @@ SIZE_TO_BAND = {
 
 # What we assume every speaking character needs, before the AD edits it.
 DEFAULT_REQUIRED = {"wide": True, "medium": False, "close": True, "over": True}
-DEFAULT_COST = {"wide": 20000, "medium": 15000, "close": 30000, "over": 18000}
+
+# What coming back for one costs, as a share of a day with this unit.
+#
+# A pickup is a day: you recall the people, you get the location again, and
+# you shoot one thing. What varies is who you have to bring back. A close-up
+# means the actor — their availability is the expensive part, and they may be
+# on another job. A wide might be got with a double. An insert of a hand or a
+# door handle needs neither, which is exactly why it is the shot most often
+# let go.
+#
+# A share rather than a figure because a pickup with three people and a camera
+# is not a pickup with a hundred and forty. These were flat, so the headline
+# "at risk" number did not move when the crew did — a studio unit and a two
+# person crew were quoted the same thirty thousand for the same missing
+# close-up.
+PICKUP_SHARE = {"wide": 0.50, "medium": 0.38, "close": 0.75, "over": 0.45}
 
 # Shots that belong to the scene rather than to anyone in it. The scene is the
 # subject: the room, the door handle, the empty frame the effects go into.
@@ -58,10 +73,10 @@ SCENE_HELP = {
     "plate": "nobody in shot, so effects can be added later",
 }
 
-# What it costs to come back for one. An insert can be picked up almost
-# anywhere, later, with one person, which is exactly why it is the shot most
-# often let go. An establisher needs the location back.
-SCENE_COST = {"establisher": 20000, "insert": 4000, "plate": 40000}
+# The same, for the shots that belong to the scene rather than to anyone in
+# it. A plate is a full day of the whole unit because the effects vendor is
+# waiting on it; an insert is a tenth of one.
+SCENE_SHARE = {"establisher": 0.50, "insert": 0.10, "plate": 1.00}
 
 # Nobody has to be in these, and for an insert nobody should be.
 WIDE_SIZES = {"ELS", "LS", "MLS"}
@@ -124,7 +139,20 @@ def _band_of(shot_size: str) -> str | None:
     return SIZE_TO_BAND.get(shot_size)
 
 
-def matrix(client, scene_id: str) -> list[CharacterRow]:
+def pickup(client, scene_id: str, day_rate: float | None = None) -> float:
+    """What a day with this unit costs, which is what a pickup is a share of."""
+    if day_rate is not None:
+        return day_rate
+    from core.crew import day_rate as rate_of
+    row = client.query(
+        f"SELECT any(production_id) FROM {DB}.scenes WHERE scene_id = %(s)s",
+        parameters={"s": scene_id},
+    ).result_rows
+    return rate_of(row[0][0] if row and row[0][0] else "prod_now")
+
+
+def matrix(client, scene_id: str,
+           day_rate: float | None = None) -> list[CharacterRow]:
     """Who is in the scene, and what we have on each of them."""
     cast = client.query(
         f"""
@@ -215,10 +243,10 @@ def matrix(client, scene_id: str) -> list[CharacterRow]:
             wanted = DEFAULT_REQUIRED[band]
             if band == "over" and alone:
                 wanted = False
-            required, cost = overrides.get(
-                (character_id, band),
-                (wanted, DEFAULT_COST[band]),
-            )
+            required, cost = overrides.get((character_id, band), (wanted, 0))
+            if not cost:
+                cost = round(pickup(client, scene_id, day_rate)
+                             * PICKUP_SHARE[band])
             cells[band] = Cell(band=band, required=required, recover_cost_usd=cost)
 
         for take_id in here:
@@ -245,7 +273,8 @@ def matrix(client, scene_id: str) -> list[CharacterRow]:
     return rows
 
 
-def scene_shots(client, scene_id: str) -> SceneRow:
+def scene_shots(client, scene_id: str,
+                day_rate: float | None = None) -> SceneRow:
     """Shots of the scene itself, and which takes satisfy them.
 
     Required only where someone has said so. A door-knob scene is not short of
@@ -290,8 +319,9 @@ def scene_shots(client, scene_id: str) -> SceneRow:
     cells = {
         shot: Cell(band=shot,
                    required=wanted.get(shot, (False, 0))[0],
-                   recover_cost_usd=wanted.get(shot, (False, SCENE_COST[shot]))[1]
-                                    or SCENE_COST[shot])
+                   recover_cost_usd=wanted.get(shot, (False, 0))[1]
+                                    or round(pickup(client, scene_id, day_rate)
+                                             * SCENE_SHARE[shot]))
         for shot in SCENE_SHOTS
     }
 
@@ -309,8 +339,29 @@ def scene_shots(client, scene_id: str) -> SceneRow:
     return SceneRow(cells=cells)
 
 
-def summarise(rows: list[CharacterRow], scene: SceneRow | None = None) -> dict:
-    """Totals the interface and the agents both use."""
+def people_seen(client, scene_id: str) -> int:
+    """The most people the Vision Agent saw in any one take of this scene.
+
+    Being on camera and being identifiable are two different facts, and only
+    the second one needs a face. A masked character, or a wide of two people
+    running upstairs, is people nobody can name — and folding that into "no
+    people" let a scene with two actors in it report itself fully covered.
+    """
+    row = client.query(
+        f"SELECT max(length(subjects)) FROM {DB}.take_analysis "
+        f"WHERE scene_id = %(s)s",
+        parameters={"s": scene_id},
+    ).result_rows
+    return int(row[0][0]) if row and row[0][0] else 0
+
+
+def summarise(rows: list[CharacterRow], scene: SceneRow | None = None,
+              seen: int = 0) -> dict:
+    """Totals the interface and the agents both use.
+
+    `seen` is how many people are on camera. Left at zero the scene is taken
+    at its word, which is right for a scene nobody has looked at yet.
+    """
     missing = [
         {"character_id": r.character_id, "name": r.name, "band": c.band,
          "label": BAND_LABEL[c.band], "recover_cost_usd": c.recover_cost_usd}
@@ -331,14 +382,67 @@ def summarise(rows: list[CharacterRow], scene: SceneRow | None = None) -> dict:
     # No people is not the same as no gaps. A scene nobody appears in, that
     # nobody has asked anything of, has nothing to be short of, and calling
     # that "covered" would let the crew walk away from a scene never checked.
+    # People on camera that nobody could put a name to. Their coverage cannot
+    # be computed, so the scene has not been checked — saying 100% here tells
+    # the crew to walk away from a scene with actors still in it.
+    unnamed = max(0, seen - len(rows))
+
     return {
         "characters": len(rows),
+        "seen": seen,
+        "unnamed": unnamed,
         "required": required,
         "have": have,
-        "judged": required > 0,
+        "judged": required > 0 and not (not rows and unnamed),
         "completeness": round(have / required, 3) if required else 0.0,
         "missing": sorted(missing, key=lambda m: -m["recover_cost_usd"]),
         "exposure_usd": sum(m["recover_cost_usd"] for m in missing),
+    }
+
+
+def scenes_of(client, production_id: str) -> list[tuple[str, str]]:
+    """Every scene in the day, in order, with where it is."""
+    return [(r[0], r[1].replace("_", " ")) for r in client.query(
+        f"SELECT scene_id, location_id FROM {DB}.scenes "
+        f"WHERE production_id = %(p)s AND location_id != 'nothing_yet' "
+        f"ORDER BY scene_id",
+        parameters={"p": production_id},
+    ).result_rows]
+
+
+def day(client, production_id: str) -> tuple[list[CharacterRow], dict]:
+    """Where the whole day stands, not the scene that happens to be open.
+
+    The gate is asked at a company move, and a company move is a decision
+    about the day. Summed rather than run over one flat list of people,
+    because a person appears in several scenes and is short of different
+    things in each, and because the scene-level shots only mean anything
+    against the scene they belong to.
+    """
+    rows: list[CharacterRow] = []
+    total = {"characters": 0, "required": 0, "have": 0, "missing": []}
+
+    from core.crew import day_rate as rate_of
+    rate = rate_of(production_id)
+
+    for scene_id, place in scenes_of(client, production_id):
+        here = matrix(client, scene_id, rate)
+        summary = summarise(here, scene_shots(client, scene_id, rate),
+                            seen=people_seen(client, scene_id))
+        rows += here
+        total["characters"] += summary["characters"]
+        total["required"] += summary["required"]
+        total["have"] += summary["have"]
+        total["missing"] += [dict(m, scene_id=scene_id, place=place)
+                             for m in summary["missing"]]
+
+    required, have = total["required"], total["have"]
+    return rows, {
+        **total,
+        "judged": required > 0,
+        "completeness": round(have / required, 3) if required else 0.0,
+        "missing": sorted(total["missing"], key=lambda m: -m["recover_cost_usd"]),
+        "exposure_usd": sum(m["recover_cost_usd"] for m in total["missing"]),
     }
 
 

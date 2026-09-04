@@ -176,6 +176,23 @@ def crew_of(production_id: str) -> dict:
             "set_by_hand": True}
 
 
+# A pickup is priced as a share of a day, and this is the day. Ten hours is a
+# standard call — the point at which overtime has started but double time has
+# not — so it is what a production quotes a day at.
+PICKUP_HOURS = 10.0
+
+
+def day_rate(production_id: str) -> float:
+    """What one more day with this unit costs in wages.
+
+    Everything about recovering a shot scales with this. A two-person crew and
+    a studio unit were both quoted thirty thousand to come back for the same
+    close-up, which made the crew size decorative for the number the AD is
+    actually looking at.
+    """
+    return sum(p.hourly_rate for p in people_of(production_id)) * PICKUP_HOURS
+
+
 def people_of(production_id: str) -> list[Person]:
     """The crew, ready for the rule engine."""
     plan = crew_of(production_id)

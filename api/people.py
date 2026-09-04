@@ -166,7 +166,11 @@ def set_need(scene_id: str, character_id: str, band: str, body: BandSetting,
     scene_id = ws.scene_for(ch, mine, scene_id)
     character_id = ws.character_for(ch, mine, character_id)
 
-    cost = body.recover_cost_usd or cc.DEFAULT_COST.get(band, 20000)
+    # Zero means nobody has said, so the read works it out from the crew
+    # on the day. Storing the default instead froze it: rows written
+    # under a fifty-person unit still quoted fifty-person money after the
+    # production was cut to three.
+    cost = body.recover_cost_usd or 0
     ch.insert(
         "character_requirements",
         [[scene_id, character_id, band, int(body.required), cost, datetime.now()]],
