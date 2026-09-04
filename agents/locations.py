@@ -40,7 +40,43 @@ PROMPT = """These location labels were written by someone logging shots from one
 film, one shot at a time. Because each shot was described on its own, the same
 physical place has been given several different names.
 
-Say which labels are the same place.
+{shots} shots, about {minutes} minutes of footage.
+{known}
+Every shot, in the order it was taken, with the label written for it:
+{order}
+
+A crew shoots out one place and then moves. So labels that alternate shot to
+shot are one place described two or three ways — nobody carries the camera
+between rooms take by take. Labels that hold for a run of shots and then never
+appear again are a different place: that gap is the company moving.
+
+This is often the only evidence there is. A scene covered entirely in close-up
+gives no picture of the room it happened in, and the frames below will show you
+two faces and tell you nothing. The order still tells you.
+
+Say which labels are the same place. Give each one a canonical name, chosen
+from the names already used for that place rather than invented.
+
+Merge only what is genuinely the same place. There is no number to reach, and
+collapsing the list is not the goal — the goal is that each place appears once.
+
+The labels were written by somebody looking at the footage, so the words carry
+weight. Two labels naming different kinds of place — a hallway and a warehouse,
+a stairwell and a room, a doorway and a corridor — are different places, and
+stay different unless the pictures plainly show one place. Grey concrete looks
+like grey concrete; that is not evidence. Being in the same building is not
+evidence either, and the inside and the outside of one building are two places.
+
+What you are undoing is narrower than it looks: the same corridor written down
+as 'industrial corridor', 'industrial utility corridor' and 'industrial
+hallway'. Those are one place. A warehouse and a hallway are not.
+
+Every label must appear exactly once.
+
+A tight shot of a single object — a door handle, a phone, a pair of hands, a
+prop — shows almost nothing of the room around it. That is an insert, and it
+keeps its own label unless the shot genuinely shows the room it belongs to.
+Guessing here silently folds a separate piece of coverage into another scene.
 """
 
 
@@ -66,11 +102,14 @@ def merge_labels(labels: list[str], known: list[str] | None = None,
 `known` are the places this workspace already has. A label that means one
     of them maps onto it, so footage arriving later joins the existing scene.
     """
-    # First appearance order, not alphabetical: the sequence is evidence.
+    # The sequence is the evidence, so it is kept whole rather than reduced to
+    # the set of names. Which labels exist matters less than where they sit.
+    order = [(raw or "").strip().lower() for raw in labels]
+    order = [lab for lab in order if lab]
+
     seen: list[str] = []
-    for raw in labels:
-        lab = (raw or "").strip().lower()
-        if lab and lab not in seen:
+    for lab in order:
+        if lab not in seen:
             seen.append(lab)
     labels = seen
     if len(labels) < 2:
@@ -89,7 +128,8 @@ def merge_labels(labels: list[str], known: list[str] | None = None,
         shots=shots or len(labels),
         minutes=round(minutes, 1) if minutes else "unknown",
         known=known_block,
-        labels="\n".join(f"- {lab}" for lab in labels),
+        order="\n".join(f"{i:3d}  {lab}"
+                             for i, lab in enumerate(order, 1)),
     )
 
     if client is not None:
