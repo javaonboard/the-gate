@@ -45,6 +45,28 @@ NO-GO   54% of the day · 7 of 13 shots · $136,000 at risk
 close-up of Character A     $548 now    vs   $30,000 later
 ```
 
+**Put it right when it is wrong.** Where one take ends and the next begins is a
+judgment, and on raw camera-card footage it is a hard one — the camera rolls
+through the resets, the director talks over the action, and a fight is shot
+with the camera swinging hard enough to look like a cut. Measured against a
+script supervisor watching the same ten minutes, the split has landed a third
+under and two thirds over.
+
+Nobody watching the footage is in any doubt. So the person who can see it says
+so, once, and it stays said:
+
+| It got wrong | You say |
+|---|---|
+| One take split into three | tick them, **join them** |
+| A take filed under the wrong scene | tick it, **move to…** |
+| One room read as two places | **merge scenes** |
+| One actor read as two people | click a face, **this is someone already listed** |
+
+The system proposes and the AD decides. That is the honest shape of it, and it
+is why the numbers can be trusted: everything downstream — coverage, the odds,
+the money — is computed from what the person confirmed, not from what a model
+guessed.
+
 ---
 
 ## Why not a chatbot
@@ -155,6 +177,10 @@ npm run dev
 
 Then open http://localhost:5173.
 
+The demo day is shared, so it is read-only — a visitor's edit would change what
+everyone else sees. Whoever curates it can set `DEMO_EDITABLE=1` in `.env` to
+correct it in place. Leave it unset wherever this is deployed.
+
 The ClickHouse MCP server runs separately, as the read-only agent user:
 
 ```powershell
@@ -176,7 +202,7 @@ Run this is not needed, the service account is picked up automatically.
 
 ```powershell
 docker run -p 8080:8080 --env-file .env `
-  -v "$env:APPDATA\gcloudpplication_default_credentials.json:/adc.json:ro" `
+  -v "$env:APPDATA\gcloud\application_default_credentials.json:/adc.json:ro" `
   -e GOOGLE_APPLICATION_CREDENTIALS=/adc.json `
   the-gate
 ```
@@ -213,8 +239,7 @@ Three flags matter:
 Then seed the demo day:
 
 ```powershell
-python -m data.seed_demo --film ..
-ootage\horror-10min.mp4
+python -m data.seed_demo --film ..\footage\horror-10min.mp4
 ```
 
 ### Where the footage lives
