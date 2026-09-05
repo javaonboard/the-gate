@@ -40,6 +40,12 @@ COPY --from=web /web/dist ./web/dist
 ENV FOOTAGE_ROOT=/footage     FACES_DIR=/faces
 RUN mkdir -p /footage/clips /faces
 
+# Reach Gemini through Vertex on the service account, not the key-based
+# developer API. Our own client says so in code; ADK builds one of its own
+# and reads this, so without it the crew asked for an API key that was
+# never going to exist and the call fell back to the computed one.
+ENV GOOGLE_GENAI_USE_VERTEXAI=True
+
 ENV PYTHONUNBUFFERED=1 \
     PORT=8080
 

@@ -177,7 +177,10 @@ export default function App() {
 
         {error && (
           <div className="empty" style={{ color: "var(--nogo)" }}>
-            {error} — is the backend running on :8080?
+            {/* The port only means anything at a desk. Deployed, this told
+                people to go and check a server that was not the one they
+                were talking to. */}
+            {error}
           </div>
         )}
 
