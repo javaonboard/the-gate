@@ -1,7 +1,7 @@
 google-cloud-aiplatform[agent_engines,adk]>=1.101.0
 google-genai
 clickhouse-connect
-mcp-clickhouse
+mcp-clickhouse==0.4.1
 parallel-web
 fastapi
 uvicorn
