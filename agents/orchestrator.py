@@ -108,6 +108,16 @@ def build_agent(run: Run | None = None, with_mcp: bool = True):
     )
 
 
+def _place_of(client, scene_id: str) -> str:
+    """Where this scene is, in the words the crew would use for it."""
+    row = client.query(
+        f"SELECT replaceAll(location_id, '_', ' ') FROM {DB}.scenes "
+        f"WHERE scene_id = %(s)s LIMIT 1",
+        parameters={"s": scene_id},
+    ).result_rows
+    return row[0][0] if row and row[0][0] else "this scene"
+
+
 def gather_evidence(client, scene_id: str, now: datetime, call: datetime,
                     next_call: datetime, run: Run | None = None,
                     trials: int = 10_000) -> GateReport:
@@ -216,7 +226,9 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
         f"THE CALL IS {report.verdict}. This is already decided. Report it.",
         "",
         f"Trigger: {trigger.headline}. {trigger.detail}".strip(),
-        f"Scene {report.scene_id} at {report.now:%H:%M}.",
+        # The place, not the row id. Handed "prod_now_sc001" the crew said it
+        # aloud, which is nobody's idea of a scene on a call sheet.
+        f"{_place_of(client, report.scene_id)} at {report.now:%H:%M}.",
         "",
         (f"Coverage: {report.coverage.completeness:.0%} — "
          f"{report.coverage.summary['have']} of "
