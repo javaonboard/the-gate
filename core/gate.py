@@ -190,9 +190,13 @@ Overtime, a late meal and an invaded turnaround are expensive, not
         return sum(o.saving_usd for o in self.recommended)
 
     def summary(self) -> str:
-        """The one sentence an AD needs."""
-        p = self.baseline.p_make_the_day
+        """The one sentence an AD needs.
 
+        Time and room, not a probability. The odds of making the day read as a
+        hundred per cent the moment the call sheet is shot, however short the
+        scenes are, so this used to open with "100% chance of making the day"
+        over a scene ten shots down and then offer to drop the odds to 100%.
+        """
         if not self.coverage.judged:
             takes = len(getattr(self.coverage, "rows", []))
             return (
@@ -203,8 +207,9 @@ Overtime, a late meal and an invaded turnaround are expensive, not
             )
 
         if self.go:
-            return (f"Everyone's covered. {p:.0%} chance of making the day, "
-                    f"hard stop {self.baseline.hard_stop:%H:%M}.")
+            return (f"Everyone's covered. Rest starts "
+                    f"{self.baseline.hard_stop:%H:%M}, "
+                    f"{self.minutes_left:.0f} minutes off.")
 
         gaps = self.coverage.missing()
         rec = self.recommended
@@ -215,12 +220,15 @@ Overtime, a late meal and an invaded turnaround are expensive, not
                     f"Wrap and schedule it.")
 
         first = rec[0]
-        others = len(gaps) - 1
-        tail = (f" {others} more still short." if others > 0 else "")
+        room = self.room_for
+        fits = (f"{room} of the {len(gaps)} fit in the "
+                f"{self.minutes_left:.0f} minutes left"
+                if room else
+                f"None of the {len(gaps)} fit in the "
+                f"{self.minutes_left:.0f} minutes left")
         return (
-            f"{p:.0%} chance of making the day. Short a "
-            f"{first.requirement.describe} — {first.verdict}. "
-            f"Odds drop to {first.p_make_day_after:.0%} if you shoot it.{tail}"
+            f"Short {len(gaps)} shots. {fits}, starting with a "
+            f"{first.requirement.describe} — {first.verdict}."
         )
 
 
