@@ -48,7 +48,8 @@ standing in front of you and the crew is waiting to move the camera.
 
 You will be given evidence that has already been worked out:
 - what the scene needs and what is on the card
-- the odds of making the day, from ten thousand simulations
+- how long is left before the crew are owed their rest, and how many of the
+  missing shots fit in it
 - what each missing shot costs to grab now against what it costs to come back for
 - anything the scout found happening outside
 
@@ -227,11 +228,22 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
          "itself. Say exactly that. Do not say it is covered, do not say it is "
          "fine, and do not imply the crew can move on. Tell them to say what "
          "the scene needs."),
-        f"Odds of making the day: {b.p_make_the_day:.0%} over {b.trials:,} runs.",
-        f"Hard stop {b.hard_stop:%H:%M}. Likely wrap {b.median_wrap:%H:%M}, "
-        f"{b.p90_wrap:%H:%M} on a slow finish.",
+        # Time and room, not a probability.
+        #
+        # The odds were the headline here and they are the wrong headline once
+        # the call sheet is finished: nothing left to shoot reads as a hundred
+        # per cent, so the crew said "100% chance of making the day" over a
+        # scene ten shots short, and then "odds drop to 100% if you shoot it".
+        # What is left is a deadline and how much fits inside it.
+        f"{report.minutes_left:.0f} minutes until the crew are owed their "
+        f"rest at {b.hard_stop:%H:%M}. Wrapping later costs double time.",
+        f"{report.room_for} of the {len(report.coverage.missing())} missing "
+        f"shots fit in that, taking the most valuable first.",
         f"Penalty already expected: ${b.expected_penalty_usd:,.0f}.",
-        f"{len(b.setups)} setups still to shoot.",
+        (f"{len(b.setups)} setups still to shoot."
+         if b.setups else
+         "Everything on the call sheet is shot. What is left is the coverage "
+         "the scenes are short, not the schedule."),
     ]
 
     if report.options:
@@ -242,7 +254,7 @@ def evidence_brief(report: GateReport, trigger: Trigger) -> str:
                 f"- {name}: ${o.shoot_now_usd:,.0f} to shoot now, "
                 f"${o.recover_later_usd:,} to pick up later, "
                 f"saving ${o.saving_usd:,.0f}. "
-                f"Odds fall to {o.p_make_day_after:.0%} if shot."
+                f"Takes about {o.minutes:.0f} minutes."
             )
     elif report.coverage.missing():
         # Missing, but with nothing left on the schedule to hang a
