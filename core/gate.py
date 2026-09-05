@@ -118,6 +118,8 @@ class GateReport:
     compliance: DayAssessment | None = None
     # The same day, if they go and get everything worth getting.
     recovery: SimulationResult | None = None
+    # Where this scene is, in the words a call sheet would use.
+    place: str = ""
 
     @property
     def blocked_by_rule(self) -> list[Violation]:
@@ -376,9 +378,16 @@ def build_report(client, scene_id: str, now: datetime, call: datetime,
     compliance = assess_day(call, baseline.median_wrap, crew,
                             next_call=next_call, distant=distant)
 
+    here = client.query(
+        f"SELECT replaceAll(location_id, '_', ' ') FROM {cc.DB}.scenes "
+        f"WHERE scene_id = %(s)s LIMIT 1",
+        parameters={"s": scene_id},
+    ).result_rows
+
     return GateReport(scene_id=scene_id, now=now, coverage=coverage,
                       baseline=baseline, options=options,
-                      compliance=compliance, recovery=recovery)
+                      compliance=compliance, recovery=recovery,
+                      place=here[0][0] if here and here[0][0] else "")
 
 
 def render(report: GateReport) -> str:
