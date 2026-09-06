@@ -151,6 +151,11 @@ shoulders, otherwise the whole person.
 Describe them by what would let you recognise them in a different shot — hair,
 clothing, build. Do not guess names or roles.
 
+Describe the person, not the moment. What they are doing, which way they are
+facing and where they are standing all change from take to take, and a
+description that opens "lying on the ground" makes the same actor unrecognisable
+the moment they stand up. Leave posture, action and position out of it.
+
 Mark someone foreground if they are part of the action, background if they are
 a passer-by, a crowd member, or out of focus behind the subject.
 
@@ -295,6 +300,11 @@ Decide whether the first person is one of the labelled people, or someone new.
 Judge by what carries between shots — face, build, hair, and what they are
 wearing. Ignore lighting, angle, expression, focus and background; the same
 person looks very different between a wide shot and a close-up.
+
+Ignore posture and what they are doing. An actor lies on the floor in one
+setup and is standing in the next, and that is the same day's work by the same
+person — the coverage of a scene is precisely the same performer shot doing
+different things. Never treat a change of position as a change of person.
 
 Costume is strong evidence on a shoot day, because nobody changes mid-scene.
 Two people in the same costume are still two people if the faces differ.
