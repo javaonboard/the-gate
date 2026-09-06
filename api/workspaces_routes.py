@@ -202,10 +202,14 @@ Twelve tables hold rows for a day, and waiting for every one of those
         parameters={"w": workspace_id}, settings={"mutations_sync": 2},
     )
 
-    # and the rows behind it, which nobody can get to any more
-    for table in ("scenes", "setups", "takes", "take_analysis",
-                  "take_characters", "characters", "shoot_days", "crew_hours",
-                  "take_problems", "production_world", "crew_plan"):
+    # and the rows behind it, which nobody can get to any more.
+    #
+    # Read off the fork rather than written out again: the two lists were
+    # kept by hand and drifted, so a day could be copied without its world
+    # and its faults while the delete went on clearing both. Whatever making
+    # a day puts down, throwing one away takes back. crew_plan is the one
+    # extra — chosen when the day is made, not carried over from the demo.
+    for table in (*ws.FORKED, "crew_plan"):
         try:
             ch.command(
                 f"ALTER TABLE {DB}.{table} DELETE WHERE production_id = %(w)s",
