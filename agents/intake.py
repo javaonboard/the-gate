@@ -138,6 +138,8 @@ def recheck_scene(scene_id: str, production_id: str, run) -> None:
             )
     except Exception as exc:
         run.publish("continuity", "error", type(exc).__name__)
+    else:
+        run.publish("continuity", "done", "Angles checked")
 
     run.publish("orchestrator", "done",
                 f"{flagged} of {len(takes)} takes can't be used")
@@ -368,6 +370,8 @@ def _run_clips(paths: list[Path], scene_id: str, setup_hint: str, run,
             )
     except Exception as exc:
         run.publish("continuity", "error", type(exc).__name__)
+    else:
+        run.publish("continuity", "done", "Angles checked")
 
     if finish:
         run.publish("orchestrator", "done", f"{len(paths)} clip(s) taken in",
@@ -491,7 +495,12 @@ A whole film is not a take. Frame-difference detection finds the obvious
             "seconds": shot["seconds"],
         })
 
-    run.publish("editor", "tool_result",
+    # Said plainly, because this is the editor finishing rather than another
+    # interim result. Everything else on the crew ends through the step
+    # context manager, which publishes done on the way out; the editor reports
+    # by hand and simply stopped talking, leaving the graph to infer an ending
+    # that only arrived when the whole run did.
+    run.publish("editor", "done",
                 f"{len(made)} shots across {setup_index} camera positions")
     return made
 
@@ -662,6 +671,7 @@ def _run_film(source: Path, workspace: str, run) -> None:
                             f"{name}: {analysis['shot_size']}, "
                             f"{analysis.get('subjects_count', 0)} in frame",
                             {"done": watched, "of": len(clips)})
+    run.publish("vision", "done", f"{len(analyses)} of {len(clips)} watched")
 
     # Work out the world before anything is judged against it, using frames
     # from across the film rather than one shot.
@@ -687,6 +697,8 @@ def _run_film(source: Path, workspace: str, run) -> None:
     run.publish("script", "working", "Sorting the shots into scenes")
     placed = place_by_location(ch, run, workspace, clips, analyses,
                                 minutes=minutes)
+    run.publish("script", "done",
+                f"{len(set(placed.values()))} scene(s) from {len(clips)} shots")
 
     by_scene: dict[str, list[Path]] = {}
     for clip in clips:
@@ -723,10 +735,16 @@ def _run_film(source: Path, workspace: str, run) -> None:
         for name, verdict in pool.map(check_one, clips):
             if verdict:
                 faults[name] = verdict
+        run.publish("qc", "done",
+                    f"{sum(1 for v in faults.values() if v)} take(s) with "
+                    f"something to say")
         run.publish("casting", "working",
                     f"Looking for faces in {len(clips)} takes, "
                     f"{AT_ONCE} at a time")
         faces = dict(pool.map(look_one, clips))
+    run.publish("casting", "done",
+                f"{sum(len(f) for f in faces.values())} sighting(s) "
+                f"across {len(clips)} takes")
 
     for scene_id, group in by_scene.items():
         # keep the Editor's grouping: shots it called "camera stopped and
