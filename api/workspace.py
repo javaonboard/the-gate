@@ -28,7 +28,7 @@ FORKED: dict[str, list[str]] = {
     "setups": ["production_id", "shoot_day", "scene_id", "setup_id", "start_ts",
                "end_ts", "planned_duration_s", "actual_duration_s",
                "location_id", "int_ext", "day_night", "scene_type",
-               "extras_count", "dp_id", "crew_size"],
+               "extras_count", "dp_id", "crew_size", "shot_size"],
     "takes": ["production_id", "shoot_day", "scene_id", "setup_id", "take_no",
               "take_id", "camera_roll", "clip_name", "tc_start", "tc_end",
               "duration_s", "lens_mm", "t_stop", "nd", "iso", "fps",
@@ -52,6 +52,15 @@ FORKED: dict[str, list[str]] = {
     "crew_hours": ["production_id", "shoot_day", "person_id", "department",
                    "call_ts", "wrap_ts", "meal_breaks", "is_minor",
                    "union_local"],
+    # What the day is set in, and what was already found wrong in it. Left out
+    # of the copy, a fork arrived with its takes judged but its world blank, so
+    # nothing could be an anachronism and every note the QC pass had written
+    # was gone. The footage looked analysed and was not.
+    "production_world": ["production_id", "period", "setting", "notes",
+                         "updated_at"],
+    "take_problems": ["production_id", "scene_id", "setup_id", "take_id",
+                      "category", "severity", "what", "where_in_frame",
+                      "at_seconds", "confidence", "model_id", "checked_at"],
 }
 
 
