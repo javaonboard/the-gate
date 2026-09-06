@@ -85,8 +85,28 @@ PROMPT = """You are a script supervisor logging a take on a film set.
 Watch this clip and describe it factually. It is one continuous camera setup
 off the camera card, so it may open on a clapperboard before the take starts.
 
+Shot size is where the frame cuts the body, not how close it feels:
+
+- ELS  the figure is small, the place is the subject
+- LS   head to feet, with room around them
+- MLS  cut at the knees
+- MS   cut at the waist
+- MCU  cut at the chest, head and shoulders and a little below
+- CU   the face fills the frame, cut at the collar
+- ECU  part of a face, or a detail
+
+Judge it on how much of the person is in frame. A subject standing away from
+the camera in a wide room is not a close-up because you can read their face.
+
+Take the size that holds for most of the take. If the camera does not move and
+the subject walks out of frame or behind something, the size is still whatever
+it was while they were in it — but say in the summary that they leave, because
+a take where the subject is absent for half of it does not cover them.
+
+If there is no person, size the object the way you would size a body: a whole
+door is a wide, a hand on a doorknob is a close-up.
+
 Be precise about:
-- shot size, using standard film terms
 - camera movement
 - interior or exterior, and whether it reads as day or night
 - who is in frame and which way they are looking
