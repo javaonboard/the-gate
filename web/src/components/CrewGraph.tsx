@@ -86,7 +86,19 @@ export function CrewGraph({ events, busy, onClose }: {
         // the tool it actually reached for, not the sentence about it
         now.tool = (e.data?.tool as string) || now.tool;
       }
-      if (e.phase === "tool_result" || e.phase === "done" || e.phase === "result") {
+      // A tool coming back is not the agent finishing. It asked something and
+      // got an answer, and now it has to do the work with it — the editor
+      // reaches for ffmpeg early and then watches the whole film. Counting
+      // this as done put the spinner out while the agent was still going, and
+      // the status rail, which never believed it, went on saying so.
+      if (e.phase === "tool_result") {
+        now.state = "working";
+        if (e.message) now.said = e.message;
+      }
+      // Only the agent itself says it has stopped. An error is a stop too —
+      // otherwise a failed agent spins until the whole run gives up.
+      if (e.phase === "done" || e.phase === "result"
+          || e.phase === "complete" || e.phase === "error") {
         now.state = "done";
         if (e.message) now.said = e.message;
         // how long it took, which is the part nobody can fake
