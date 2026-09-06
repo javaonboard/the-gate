@@ -92,7 +92,13 @@ export function CrewGraph({ events, busy, onClose }: {
       // this as done put the spinner out while the agent was still going, and
       // the status rail, which never believed it, went on saying so.
       if (e.phase === "tool_result") {
-        now.state = "working";
+        // Keeps a working agent working; never wakes a finished one. The
+        // takes are written to the database after the batch that judged them
+        // has ended, and each write echoes its verdict — so Scripty, QC and
+        // Casting all publish results after saying they had finished. Read as
+        // a start, those echoes put three finished agents back to work and
+        // left them spinning until the run itself ended.
+        if (now.state !== "done") now.state = "working";
         if (e.message) now.said = e.message;
       }
       // Only the agent itself says it has stopped. An error is a stop too —
