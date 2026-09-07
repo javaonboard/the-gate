@@ -24,6 +24,9 @@ export function Intake({ sceneId, sceneName, onStarted, onCleared,
   const clipPicker = useRef<HTMLInputElement>(null);
 
   async function sendFilm(files: FileList | null) {
+    // One at a time. Nothing stopped a second ask while the first was still
+    // uploading, and each one cut the same film again under its own roll.
+    if (busy) return;
     const film = files?.[0];
     if (!film?.type.startsWith("video/")) return setNote("Not a video file.");
 
@@ -45,6 +48,7 @@ export function Intake({ sceneId, sceneName, onStarted, onCleared,
   }
 
   async function sendClips(files: FileList | null) {
+    if (busy) return;
     const clips = Array.from(files ?? []).filter((f) =>
       f.type.startsWith("video/")
     );
@@ -107,8 +111,13 @@ export function Intake({ sceneId, sceneName, onStarted, onCleared,
         }}
         onClick={() => filmPicker.current?.click()}
       >
+        {/* The picker lives inside the card the card's own click opens, so a
+            programmatic click on it bubbles straight back out and opens it
+            again. Clearing the value lets the same file be chosen twice. */}
         <input ref={filmPicker} type="file" accept="video/*" hidden
-               onChange={(e) => sendFilm(e.target.files)} />
+               onClick={(e) => e.stopPropagation()}
+               onChange={(e) => { void sendFilm(e.target.files);
+                                  e.target.value = ""; }} />
         <svg viewBox="0 0 24 24" fill="none" aria-hidden>
           <rect x="2.5" y="4.5" width="19" height="15" rx="2.5"
                 stroke="currentColor" strokeWidth="1.6" />
@@ -139,7 +148,9 @@ export function Intake({ sceneId, sceneName, onStarted, onCleared,
         onClick={() => clipPicker.current?.click()}
       >
         <input ref={clipPicker} type="file" accept="video/*" multiple hidden
-               onChange={(e) => sendClips(e.target.files)} />
+               onClick={(e) => e.stopPropagation()}
+               onChange={(e) => { void sendClips(e.target.files);
+                                  e.target.value = ""; }} />
         <svg viewBox="0 0 24 24" fill="none" aria-hidden>
           <rect x="2" y="5" width="14" height="14" rx="2.5"
                 stroke="currentColor" strokeWidth="1.6" />

@@ -139,6 +139,20 @@ class Bus:
     def get(self, run_id: str) -> Run | None:
         return self.runs.get(run_id)
 
+    def active(self, key: str) -> Run | None:
+        """The run still going on this day, if there is one.
+
+        Taking a film in runs for minutes, and the browser can ask twice: a
+        drag that also registers as a click, an impatient second drop, a
+        retried request. Each ask cut the same file again under a fresh camera
+        roll, so one video arrived as two takes of the same thing.
+        """
+        for run_id in self.order:
+            run = self.runs.get(run_id)
+            if run is not None and run.scene_id == key and not run.finished:
+                return run
+        return None
+
     def latest(self) -> Run | None:
         return self.runs.get(self.order[0]) if self.order else None
 

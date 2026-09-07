@@ -36,6 +36,14 @@ async def upload_film(request: Request, response: Response,
     ch = client()
     mine = ws.writable(request, response)
 
+    # Already taking one in for this day: hand back the run in flight rather
+    # than start a second. Two asks meant two passes over the same file, and
+    # the same video landed twice under two camera rolls.
+    going = bus.active(mine)
+    if going is not None:
+        return {"run_id": going.run_id, "film": file.filename or "",
+                "already_running": True}
+
     here = upload_dir(mine, "film")
     name = Path(file.filename or f"film_{uuid.uuid4().hex[:6]}.mp4").name
     target = here / name
