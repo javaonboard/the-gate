@@ -19,7 +19,10 @@ BANDS = ["wide", "medium", "close", "over"]
 BAND_LABEL = {
     "wide": "wide",
     "medium": "medium",
-    "close": "close-up",
+    # The band, not one size in it. A medium close-up covers a character's
+    # close as surely as a close-up does, and calling the band "close-up"
+    # read as a contradiction against a take the log had just called MCU.
+    "close": "close",
     "over": "over-the-shoulder",
 }
 
