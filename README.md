@@ -7,6 +7,8 @@ whether you can move on.
 is already loaded, so there is nothing to set up. Press *Start a new day → Copy*
 to get one you can change.
 
+**[Watch the three-minute demo →](https://youtu.be/V_Pxzlaibeg)**
+
 ---
 
 ## The problem
