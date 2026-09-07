@@ -45,7 +45,12 @@ const INTAKE: Stage[] = [
   { key: "vision", name: "Scripty", does: "logs every take — size, movement, who is in it", vendor: "gemini", kind: "model", together: true },
   { key: "qc", name: "QC", does: "finds what would stop a take being used", vendor: "gemini", kind: "model" },
   { key: "script", name: "Breakdown", does: "merges the labels into the places they really are", vendor: "gemini", kind: "model", together: true },
-  { key: "casting", name: "Casting", does: "finds who is in each take, and who they are", vendor: "clickhouse", kind: "partner" },
+  // Badged ClickHouse for the job ClickHouse actually does here: a vector
+  // search over the faces already on the day, narrowing a new one to the few
+  // people it could be before the model is asked to choose between them. The
+  // old wording said it found faces, which read as though the database were
+  // doing the looking.
+  { key: "casting", name: "Casting", does: "matches every new face against the cast so far, by vector search", vendor: "clickhouse", kind: "partner" },
   { key: "continuity", name: "Continuity", does: "checks the takes will cut together", vendor: "gemini", kind: "model" },
 ];
 
