@@ -3,6 +3,10 @@
 Shoot-day operations for a film crew. Drop a day's footage in and it tells you
 whether you can move on.
 
+**[Open it →](https://the-gate-524607351626.us-central1.run.app)** — a shot day
+is already loaded, so there is nothing to set up. Press *Start a new day → Copy*
+to get one you can change.
+
 ---
 
 ## The problem
