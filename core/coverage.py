@@ -213,6 +213,12 @@ def connect():
         secure=True,
         database=DB,
         autogenerate_session_id=False,
+        # Long enough to let a sleeping cloud service wake, short enough that a
+        # connection which is never coming back says so. The driver's own
+        # default is five minutes, which is not a wait anybody sits through:
+        # the first visitor after an idle spell left after fourteen seconds.
+        connect_timeout=30,
+        send_receive_timeout=90,
     )
 
 
